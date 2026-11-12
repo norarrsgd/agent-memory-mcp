@@ -3,10 +3,12 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/norarrsgd/agent-memory-mcp/internal/domain"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -151,5 +153,121 @@ func TestDoctorDetectsFTSMismatch(t *testing.T) {
 	}
 	if _, err := s.Doctor(ctx); err == nil {
 		t.Fatal("doctor accepted inconsistent index")
+	}
+}
+
+// A hostile schema (trigger or view) must not run under a trusted schema. The probed unsafe functions are
+// absent or disabled in this build, so a behavioral test cannot tell the setting on from off; assert it on both pools.
+func TestSchemaIsUntrusted(t *testing.T) {
+	s := temporaryStore(t)
+	for name, db := range map[string]*sql.DB{"read": s.read, "write": s.write} {
+		var trusted int
+		if err := db.QueryRow("PRAGMA trusted_schema").Scan(&trusted); err != nil || trusted != 0 {
+			t.Fatalf("%s pool trusts the schema: %d %v", name, trusted, err)
+		}
+	}
+}
+
+func TestDatabaseSizeLimit(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := OpenLimited(filepath.Join(dir, "private", "db"), 50, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	ctx := context.Background()
+	body := strings.Repeat("capacity ", 6000)
+	var stored []string
+	var full error
+	for i := 0; i < 2000 && full == nil; i++ {
+		m := domain.Memory{ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", i), Scope: "global", Type: "fact", Title: "Bulk", Content: body, Tags: []string{}, SourceAgent: "test", Status: "active", Evidence: "observation"}
+		if _, full = s.Put(ctx, m, 0, nil, "", 0); full == nil {
+			stored = append(stored, m.ID)
+		}
+	}
+	if domain.SafeError(full).Code != "storage_full" {
+		t.Fatalf("expected storage_full after %d records, got %v", len(stored), full)
+	}
+	if len(stored) == 0 {
+		t.Fatal("limit rejected the first write")
+	}
+	if _, err = s.Get(ctx, stored[len(stored)-1]); err != nil {
+		t.Fatalf("record stored before the limit is unreadable: %v", err)
+	}
+	if _, err = s.Doctor(ctx); err != nil {
+		t.Fatalf("database damaged by hitting the limit: %v", err)
+	}
+	if _, err = s.Export(ctx); err != nil {
+		t.Fatalf("export unavailable at the limit: %v", err)
+	}
+	if err = s.Backup(ctx, filepath.Join(dir, "backups", "full.db")); err != nil {
+		t.Fatalf("backup unavailable at the limit: %v", err)
+	}
+	if _, err = OpenLimited(filepath.Join(dir, "other", "db"), 50, 8); err == nil {
+		t.Fatal("limit below the minimum accepted")
+	}
+}
+
+func TestDoctorWarnsAboutWritableAncestors(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := filepath.Join(dir, "open")
+	if err = os.Mkdir(open, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(open, 0777); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Open(filepath.Join(open, "private", "db"), 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	report, err := s.Doctor(context.Background())
+	if err != nil {
+		t.Fatalf("a warning must not fail the check: %v", err)
+	}
+	if got, _ := report["ancestor_permissions"].(string); !strings.HasPrefix(got, "warn:") || !strings.Contains(got, open) {
+		t.Fatalf("writable ancestor not reported: %v", report["ancestor_permissions"])
+	}
+}
+
+func TestSizeLimitUsesTheDatabasePageSize(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "small-pages.db")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, statement := range []string{"PRAGMA page_size=1024", "CREATE TABLE unrelated(x)"} {
+		if _, err = db.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	db.Close()
+	s, err := OpenLimited(path, 50, 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var pages int
+	if err = s.write.QueryRow("PRAGMA max_page_count").Scan(&pages); err != nil || pages != 16*1024*1024/1024 {
+		t.Fatalf("1 KiB pages must allow 16384 pages, got %d %v", pages, err)
 	}
 }

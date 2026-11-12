@@ -18,6 +18,7 @@ type Config struct {
 	SearchLimit      int    `json:"search_limit"`
 	MaxResponseChars int    `json:"max_response_chars"`
 	BusyTimeoutMS    int    `json:"busy_timeout_ms"`
+	MaxDBMB          int    `json:"max_db_mb"`
 	LogLevel         string `json:"log_level"`
 	BackupDir        string `json:"backup_dir"`
 	ExportDir        string `json:"export_dir"`
@@ -28,7 +29,7 @@ func Load(path string, overrides ...func(*Config)) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	c := Config{DBPath: filepath.Join(home, ".local/share/agent-memory/memory.db"), SearchLimit: 5, MaxResponseChars: 8000, BusyTimeoutMS: 5000, LogLevel: "error"}
+	c := Config{DBPath: filepath.Join(home, ".local/share/agent-memory/memory.db"), SearchLimit: 5, MaxResponseChars: 8000, BusyTimeoutMS: 5000, MaxDBMB: 1024, LogLevel: "error"}
 	explicit := path != ""
 	if path == "" {
 		path = os.Getenv("AGENT_MEMORY_CONFIG")
@@ -62,7 +63,7 @@ func Load(path string, overrides ...func(*Config)) (Config, error) {
 	for _, field := range []struct {
 		key  string
 		dest *int
-	}{{"SEARCH_LIMIT", &c.SearchLimit}, {"MAX_RESPONSE_CHARS", &c.MaxResponseChars}, {"BUSY_TIMEOUT_MS", &c.BusyTimeoutMS}} {
+	}{{"SEARCH_LIMIT", &c.SearchLimit}, {"MAX_RESPONSE_CHARS", &c.MaxResponseChars}, {"BUSY_TIMEOUT_MS", &c.BusyTimeoutMS}, {"MAX_DB_MB", &c.MaxDBMB}} {
 		if v, ok := os.LookupEnv("AGENT_MEMORY_" + field.key); ok {
 			n, err := strconv.Atoi(v)
 			if err != nil {
@@ -89,6 +90,9 @@ func (c Config) Validate() error {
 	}
 	if c.BusyTimeoutMS < 1 || c.BusyTimeoutMS > 30000 {
 		return fmt.Errorf("busy_timeout_ms must be 1..30000")
+	}
+	if c.MaxDBMB < 16 || c.MaxDBMB > 65536 {
+		return fmt.Errorf("max_db_mb must be 16..65536")
 	}
 	if c.LogLevel != "error" && c.LogLevel != "info" && c.LogLevel != "debug" {
 		return fmt.Errorf("log_level must be error, info or debug")

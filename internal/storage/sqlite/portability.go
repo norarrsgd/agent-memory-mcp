@@ -81,9 +81,38 @@ func (s *Store) Export(ctx context.Context) (domain.Export, error) {
 	}
 	return out, mapError(tx.Commit())
 }
+
+// EachDocument streams stored memory or project documents so a full scan does not load the database into memory.
+func (s *Store) EachDocument(ctx context.Context, projects bool, fn func(id string, document []byte) error) error {
+	query := "SELECT id, document FROM memories ORDER BY id"
+	if projects {
+		query = "SELECT key, document FROM projects ORDER BY key"
+	}
+	rows, err := s.read.QueryContext(ctx, query)
+	if err != nil {
+		return mapError(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var document []byte
+		if err = rows.Scan(&id, &document); err != nil {
+			return mapError(err)
+		}
+		if err = fn(id, document); err != nil {
+			return err
+		}
+	}
+	return mapError(rows.Err())
+}
+
 func (s *Store) Import(ctx context.Context, data domain.Export) error {
 	return s.transaction(ctx, func(c *sql.Conn) error {
 		paths, err := projectPaths(ctx, c)
+		if err != nil {
+			return err
+		}
+		count, err := projectCount(ctx, c)
 		if err != nil {
 			return err
 		}
@@ -106,12 +135,16 @@ func (s *Store) Import(ctx context.Context, data domain.Export) error {
 			if !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}
+			if count >= domain.MaxProjects {
+				return errProjectLimit()
+			}
 			if err := claimProjectPath(paths, p); err != nil {
 				return err
 			}
 			if _, err = c.ExecContext(ctx, "INSERT INTO projects VALUES(?,?)", p.Key, b); err != nil {
 				return err
 			}
+			count++
 		}
 		for _, m := range data.Memories {
 			old, err := get(ctx, c, m.ID)
@@ -178,7 +211,7 @@ func (s *Store) Backup(ctx context.Context, destination string) error {
 		return mapError(err)
 	}
 	// Validate before publishing; this opens a private task-owned snapshot only.
-	backup, err := Open(temporary, 5000)
+	backup, err := OpenLimited(temporary, 5000, s.maxDBMB)
 	if err != nil {
 		return err
 	}

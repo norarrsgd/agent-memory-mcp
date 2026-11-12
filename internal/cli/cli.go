@@ -50,6 +50,7 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	dbPath := fs.String("db-path", "", "absolute database path")
 	var output, input, key, remote, local, organization, description string
 	var searchLimit, response, busy int
+	var rescan, flagged bool
 	var logLevel string
 	fs.IntVar(&searchLimit, "search-limit", 0, "default search result count (1..20)")
 	fs.IntVar(&response, "max-response-chars", 0, "response ceiling (1024..32000)")
@@ -57,6 +58,9 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	fs.StringVar(&logLevel, "log-level", "", "error, info or debug")
 	if command == "backup" || command == "export" {
 		fs.StringVar(&output, "output", "", "absolute private output path; never overwritten")
+	}
+	if command == "doctor" {
+		fs.BoolVar(&rescan, "scan", false, "also rescan stored records for credential patterns; reports IDs only and exits 1 if any match")
 	}
 	if command == "import" {
 		fs.StringVar(&input, "input", "", "absolute path of a private JSON export")
@@ -111,7 +115,7 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 		fmt.Fprintln(diagnostics, "configuration error:", err)
 		return 2
 	}
-	store, err := sqlite.Open(c.DBPath, c.BusyTimeoutMS)
+	store, err := sqlite.OpenLimited(c.DBPath, c.BusyTimeoutMS, c.MaxDBMB)
 	if err != nil {
 		fmt.Fprintln(diagnostics, domain.SafeError(err))
 		return 1
@@ -135,7 +139,15 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 			err = nil
 		}
 	case "doctor":
-		result, err = store.Doctor(ctx)
+		var report map[string]any
+		report, err = store.Doctor(ctx)
+		if err == nil && rescan {
+			var audit domain.AuditResult
+			audit, err = svc.Audit(ctx)
+			report["audit"] = audit
+			flagged = len(audit.FlaggedMemories)+len(audit.FlaggedProjects) > 0
+		}
+		result = report
 	case "status":
 		result, err = store.Status(ctx)
 	case "projects":
@@ -185,6 +197,10 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 			fmt.Fprintln(diagnostics, "output failed")
 			return 1
 		}
+	}
+	if flagged {
+		fmt.Fprintln(diagnostics, "stored records match credential patterns; see audit")
+		return 1
 	}
 	return 0
 }

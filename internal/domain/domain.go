@@ -25,6 +25,9 @@ func SafeError(err error) *Error {
 	return &Error{Code: "storage_failure", Message: "storage operation failed"}
 }
 
+// MaxProjects bounds registered projects, whether registered one by one or imported.
+const MaxProjects = 10000
+
 type Project struct {
 	Key          string `json:"key"`
 	RemoteURL    string `json:"remote_url,omitempty"`
@@ -166,6 +169,14 @@ type HandoffResult struct {
 	UpdatedAt      string `json:"updated_at,omitempty"`
 	TaskIdentifier string `json:"task_identifier,omitempty"`
 }
+
+// AuditResult lists stored records that match a credential pattern; it never carries record content.
+type AuditResult struct {
+	Checked         int      `json:"checked"`
+	FlaggedMemories []string `json:"flagged_memories"`
+	FlaggedProjects []string `json:"flagged_projects"`
+}
+
 type Export struct {
 	FormatVersion int       `json:"format_version"`
 	ExportedAt    string    `json:"exported_at"`

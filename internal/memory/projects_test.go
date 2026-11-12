@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -154,5 +155,51 @@ func TestConcurrentRegistrationRejectsEquivalentPaths(t *testing.T) {
 	}
 	if wins != 1 {
 		t.Fatalf("expected one registration winner, got %d", wins)
+	}
+}
+
+// The README's recovery for a squatted project key: export, drop the project offline, import into a fresh database.
+func TestSquattedProjectRecoveryByExportEditImport(t *testing.T) {
+	svc, s := setup(t)
+	ctx := context.Background()
+	if err := svc.RegisterProject(ctx, domain.Project{Key: "squatter", LocalPath: "/work/real-repo"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RegisterProject(ctx, domain.Project{Key: "real-repo", LocalPath: "/work/real-repo"}); code(err) != "conflict" {
+		t.Fatalf("the squatted path was not held: %v", err)
+	}
+	kept, err := svc.Upsert(ctx, input())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := s.Export(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	projects := []domain.Project{}
+	for _, p := range snapshot.Projects {
+		if p.Key != "squatter" {
+			projects = append(projects, p)
+		}
+	}
+	snapshot.Projects = projects
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fresh, err := sqlite.Open(filepath.Join(dir, "fresh", "memory.db"), 5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fresh.Close()
+	target := New(fresh, config.Config{SearchLimit: 5, MaxResponseChars: 8000})
+	if err = target.Import(ctx, snapshot); err != nil {
+		t.Fatalf("recovery import failed: %v", err)
+	}
+	if err = target.RegisterProject(ctx, domain.Project{Key: "real-repo", LocalPath: "/work/real-repo"}); err != nil {
+		t.Fatalf("the path is still held after recovery: %v", err)
+	}
+	if got, err := target.Get(ctx, domain.GetInput{ID: kept.ID}); err != nil || got.Memory.Title != "Migration constraint" {
+		t.Fatalf("memory lost in recovery: %+v %v", got, err)
 	}
 }

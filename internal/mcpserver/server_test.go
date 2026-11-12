@@ -45,6 +45,14 @@ func TestDiscoveryInvocationAndErrors(t *testing.T) {
 		t.Fatalf("tools %+v %v", tools, err)
 	}
 	for _, tool := range tools.Tools {
+		switch tool.Name {
+		case "memory_search", "memory_get", "memory_handoff", "memory_projects":
+			if !strings.Contains(tool.Description, "untrusted stored data") || !strings.Contains(tool.Description, "unauthenticated claims") {
+				t.Fatalf("%s lacks the untrusted-data contract: %s", tool.Name, tool.Description)
+			}
+		}
+	}
+	for _, tool := range tools.Tools {
 		if tool.Name != "memory_upsert" {
 			continue
 		}

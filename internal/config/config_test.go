@@ -13,7 +13,7 @@ func TestDefaultsAndPrecedence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.SearchLimit != 5 || c.MaxResponseChars != 8000 || c.BusyTimeoutMS != 5000 {
+	if c.SearchLimit != 5 || c.MaxResponseChars != 8000 || c.BusyTimeoutMS != 5000 || c.MaxDBMB != 1024 {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 	if c.DBPath != os.Getenv("AGENT_MEMORY_DB_PATH") {
@@ -22,7 +22,7 @@ func TestDefaultsAndPrecedence(t *testing.T) {
 }
 
 func TestInvalidConfiguration(t *testing.T) {
-	for _, body := range []string{`{"unknown":true}`, `{"search_limit":21}`, `{"max_response_chars":20}`, `{"db_path":"file:unsafe"}`, `{} {}`} {
+	for _, body := range []string{`{"unknown":true}`, `{"search_limit":21}`, `{"max_response_chars":20}`, `{"max_db_mb":8}`, `{"max_db_mb":70000}`, `{"db_path":"file:unsafe"}`, `{} {}`} {
 		t.Run(body, func(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "config.json")
 			if err := os.WriteFile(p, []byte(body), 0600); err != nil {

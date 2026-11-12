@@ -5,10 +5,12 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"embed"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,10 +26,39 @@ var migrations embed.FS
 
 const SchemaVersion = 1
 
+// DefaultMaxDBMB is the database size ceiling used when no limit is configured.
+const DefaultMaxDBMB = 1024
+
+// defaultPageSize is SQLite's default, used for a database file that does not exist yet.
+const defaultPageSize = 4096
+
+// databasePageSize reads the page size from an existing database header, so the page-count cap matches the file.
+func databasePageSize(path string) int {
+	f, err := os.Open(path)
+	if err != nil {
+		return defaultPageSize
+	}
+	defer f.Close()
+	var header [18]byte
+	if _, err = io.ReadFull(f, header[:]); err != nil {
+		return defaultPageSize
+	}
+	size := int(binary.BigEndian.Uint16(header[16:18]))
+	if size == 1 {
+		return 65536
+	}
+	if size < 512 || size&(size-1) != 0 {
+		return defaultPageSize
+	}
+	return size
+}
+
 type Store struct {
 	read  *sql.DB
 	write *sql.DB
 	Path  string
+
+	maxDBMB int
 }
 type querier interface {
 	QueryRowContext(context.Context, string, ...any) *sql.Row
@@ -77,8 +108,16 @@ func PrivatePath(path string, create bool) error {
 }
 
 func Open(path string, busyMS int) (*Store, error) {
+	return OpenLimited(path, busyMS, DefaultMaxDBMB)
+}
+
+// OpenLimited opens the store and caps database growth at maxDBMB mebibytes; writes beyond it fail with storage_full.
+func OpenLimited(path string, busyMS, maxDBMB int) (*Store, error) {
 	if busyMS < 1 || busyMS > 30000 {
 		return nil, domain.Err("validation", "invalid busy timeout")
+	}
+	if maxDBMB < 16 || maxDBMB > 65536 {
+		return nil, domain.Err("validation", "invalid database size limit")
 	}
 	if err := PrivatePath(path, true); err != nil {
 		return nil, err
@@ -99,7 +138,7 @@ func Open(path string, busyMS int) (*Store, error) {
 	}
 	u := url.URL{Scheme: "file", Path: path}
 	q := u.Query()
-	for _, p := range []string{"busy_timeout(" + fmt.Sprint(busyMS) + ")", "foreign_keys(1)", "synchronous(FULL)"} {
+	for _, p := range []string{"busy_timeout(" + fmt.Sprint(busyMS) + ")", "foreign_keys(1)", "synchronous(FULL)", "trusted_schema(0)", "max_page_count(" + fmt.Sprint(maxDBMB*1024*1024/databasePageSize(path)) + ")"} {
 		q.Add("_pragma", p)
 	}
 	u.RawQuery = q.Encode()
@@ -108,7 +147,7 @@ func Open(path string, busyMS int) (*Store, error) {
 		return nil, err
 	}
 	w.SetMaxOpenConns(1)
-	s := &Store{write: w, Path: path}
+	s := &Store{write: w, Path: path, maxDBMB: maxDBMB}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(busyMS+1000)*time.Millisecond)
 	defer cancel()
 	if err = retryStartup(ctx, func() error { _, err := w.ExecContext(ctx, "PRAGMA journal_mode=WAL"); return err }); err != nil {
@@ -168,6 +207,9 @@ func mapError(err error) error {
 		return e
 	}
 	var se *sqliteDriver.Error
+	if errors.As(err, &se) && se.Code()&255 == 13 {
+		return domain.Err("storage_full", "database is full: raise max_db_mb or free disk space; archiving does not reclaim space")
+	}
 	if errors.As(err, &se) && (se.Code()&255 == 5 || se.Code()&255 == 6) {
 		return &domain.Error{Code: "busy", Message: "database busy; retry later", Retryable: true}
 	}
@@ -267,6 +309,13 @@ func (s *Store) RegisterProject(ctx context.Context, p domain.Project) error {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
+		count, err := projectCount(ctx, c)
+		if err != nil {
+			return err
+		}
+		if count >= domain.MaxProjects {
+			return errProjectLimit()
+		}
 		paths, err := projectPaths(ctx, c)
 		if err != nil {
 			return err
@@ -283,6 +332,14 @@ func (s *Store) RegisterProject(ctx context.Context, p domain.Project) error {
 		return err
 	})
 }
+
+func projectCount(ctx context.Context, c *sql.Conn) (int, error) {
+	var count int
+	err := c.QueryRowContext(ctx, "SELECT count(*) FROM projects").Scan(&count)
+	return count, err
+}
+
+func errProjectLimit() error { return domain.Err("limit", "project limit reached") }
 
 func normalizeProject(p domain.Project) domain.Project {
 	if p.LocalPath != "" {
@@ -559,7 +616,26 @@ func (s *Store) Doctor(ctx context.Context) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"schema_version": SchemaVersion, "integrity": "ok", "fts5": "ok", "foreign_keys": "ok"}, nil
+	return map[string]any{"schema_version": SchemaVersion, "integrity": "ok", "fts5": "ok", "foreign_keys": "ok", "ancestor_permissions": ancestorPermissions(s.Path)}, nil
+}
+
+// ancestorPermissions reports directories above the private parent that others can write to without the sticky bit,
+// since they could rename the private directory away. It warns instead of failing: valid setups such as
+// user-private groups legitimately use group-writable home directories.
+func ancestorPermissions(path string) string {
+	var open []string
+	for dir := filepath.Dir(filepath.Dir(path)); ; dir = filepath.Dir(dir) {
+		if info, err := os.Stat(dir); err == nil && info.Mode().Perm()&0022 != 0 && info.Mode()&os.ModeSticky == 0 {
+			open = append(open, dir)
+		}
+		if dir == filepath.Dir(dir) {
+			break
+		}
+	}
+	if len(open) == 0 {
+		return "ok"
+	}
+	return "warn: group/world-writable without sticky bit: " + strings.Join(open, ", ")
 }
 func (s *Store) Status(ctx context.Context) (map[string]any, error) {
 	var projects, memories int

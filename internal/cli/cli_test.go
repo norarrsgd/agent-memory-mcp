@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/norarrsgd/agent-memory-mcp/internal/domain"
+	"github.com/norarrsgd/agent-memory-mcp/internal/storage/sqlite"
 )
 
 func TestHelpAndOperationalCommands(t *testing.T) {
@@ -48,5 +51,59 @@ func TestFlagsOverrideEnvironmentAndRejectExplicitZero(t *testing.T) {
 	diagnostics.Reset()
 	if code := Run(context.Background(), []string{"status", "--search-limit", "0"}, &out, &diagnostics); code != 2 {
 		t.Fatalf("explicit invalid zero accepted: %d", code)
+	}
+}
+
+func TestDoctorScanReportsIDsOnly(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	var out, diagnostics bytes.Buffer
+	if code := Run(context.Background(), []string{"projects", "register", "--key", "alpha"}, &out, &diagnostics); code != 0 {
+		t.Fatalf("register: %d %s", code, diagnostics.String())
+	}
+	out.Reset()
+	if code := Run(context.Background(), []string{"doctor", "--scan"}, &out, &diagnostics); code != 0 {
+		t.Fatalf("doctor --scan: %d %s", code, diagnostics.String())
+	}
+	for _, want := range []string{`"audit"`, `"checked":1`, `"flagged_memories":[]`, `"flagged_projects":[]`} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %s in %s", want, out.String())
+		}
+	}
+	out.Reset()
+	if code := Run(context.Background(), []string{"doctor"}, &out, &diagnostics); code != 0 || strings.Contains(out.String(), "audit") {
+		t.Fatalf("plain doctor must not scan: %d %s", code, out.String())
+	}
+}
+
+func TestDoctorScanExitsNonZeroOnFlaggedRecords(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	path := filepath.Join(dir, ".local/share/agent-memory/memory.db")
+	store, err := sqlite.Open(path, 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	flagged := domain.Memory{ID: "00000000-0000-4000-8000-0000000000aa", Scope: "global", Type: "fact", Title: "Old", Content: "GITHUB_TOKEN=" + strings.Repeat("a1", 13), Tags: []string{}, SourceAgent: "test", Status: "active", Evidence: "observation"}
+	if _, err = store.Put(context.Background(), flagged, 0, nil, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+	var out, diagnostics bytes.Buffer
+	if code := Run(context.Background(), []string{"doctor", "--scan"}, &out, &diagnostics); code != 1 {
+		t.Fatalf("flagged records must exit 1, got %d %s", code, diagnostics.String())
+	}
+	if !strings.Contains(out.String(), flagged.ID) || strings.Contains(out.String(), "a1a1") {
+		t.Fatalf("report must list the ID and never the content: %s", out.String())
+	}
+	out.Reset()
+	if code := Run(context.Background(), []string{"doctor"}, &out, &diagnostics); code != 0 {
+		t.Fatalf("plain doctor must stay informational about content: %d", code)
 	}
 }

@@ -33,16 +33,35 @@ var idRE = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a
 var secrets = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----`),
 	regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-(?:proj-|ant-)?[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|xox[baprs]-[A-Za-z0-9-]{10,})`),
-	regexp.MustCompile(`(?i)\b(?:password|passwd|pwd|api[_-]?key|access[_-]?token|client[_-]?secret|authorization)\s*["']?\s*[:=]\s*["']?[^\s"';,}]{3,}`),
+	regexp.MustCompile(`(?i)(?:password|passwd|pwd|api[_-]?key|access[_-]?token|client[_-]?secret|authorization)\s*["']?\s*[:=]\s*["']?[^\s"';,}]{3,}`),
 	regexp.MustCompile(`(?i)[a-z][a-z0-9+.-]*://[^\s/@:]+:[^\s/@]+@`),
 	regexp.MustCompile(`\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
+	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._~+/=-]{20,}`),
+	// Azure shared access signatures and connection-string secrets.
+	regexp.MustCompile(`(?i)(?:[?&;]sig=[A-Za-z0-9%+/=]{20,}|\bSharedAccessSignature\s*[:=]\s*\S{8,})`),
+	regexp.MustCompile(`\b(?:AIza[0-9A-Za-z_-]{35}|(?:sk|rk)_live_[0-9A-Za-z]{16,}|npm_[A-Za-z0-9]{36}|pypi-[A-Za-z0-9_-]{20,})`),
+	// Long userinfo without a colon is a token used as the username.
+	regexp.MustCompile(`://[A-Za-z0-9._~-]{24,}@`),
 }
 
+// keyedValue captures the value after a broad key name. Prose such as "token: 42" or "secret: key-vault-name" is not a
+// credential, so sensitive requires a long value that also contains a digit.
+// shortcut: an all-letter secret after these key names is accepted, upgrade with an entropy estimate if that matters.
+var keyedValue = regexp.MustCompile(`(?i)(?:secret|token|auth[_-]?token|private[_-]?key|account[_-]?key|secret[_-]?access[_-]?key|shared[_-]?access[_-]?key|credentials?)\s*["']?\s*[:=]\s*["']?([A-Za-z0-9_+/=.-]{16,})`)
+
 func sensitive(text string) error {
+	found := false
 	for _, re := range secrets {
 		if re.MatchString(text) {
-			return domain.Err("sensitive_content", "content matches a credential pattern; remove secrets before storing")
+			found = true
+			break
 		}
+	}
+	for _, m := range keyedValue.FindAllStringSubmatch(text, -1) {
+		found = found || strings.ContainsAny(m[1], "0123456789")
+	}
+	if found {
+		return domain.Err("sensitive_content", "content matches a credential pattern; remove secrets before storing")
 	}
 	return nil
 }
@@ -50,6 +69,11 @@ func scan(v any) error {
 	if err := domain.CheckInputSize(v); err != nil {
 		return err
 	}
+	return scanContent(v)
+}
+
+// scanContent applies the credential patterns without the input-size limit, which stored records may legitimately exceed once JSON-escaped.
+func scanContent(v any) error {
 	b, err := json.Marshal(v)
 	if err != nil {
 		return domain.Err("validation", "invalid input")
@@ -446,6 +470,27 @@ func (s *Service) Archive(ctx context.Context, in domain.ArchiveInput) (domain.W
 	m.ArchiveReason = in.Reason
 	return s.store.Put(ctx, m, in.ExpectedVersion, nil, "", 0)
 }
+
+// checkRemoteURL rejects a password in URL userinfo, including an empty one that the generic scan misses.
+func checkRemoteURL(remote string) error {
+	u, err := url.Parse(remote)
+	if err != nil {
+		// A password with a space or control character makes the URL unparsable, so refuse any userinfo we cannot inspect.
+		if urlUserinfo.MatchString(remote) {
+			return domain.Err("sensitive_content", "remote URL has userinfo that cannot be parsed; remove credentials")
+		}
+		return nil
+	}
+	if u.User != nil {
+		if _, present := u.User.Password(); present {
+			return domain.Err("sensitive_content", "remote URL must not contain a password")
+		}
+	}
+	return nil
+}
+
+var urlUserinfo = regexp.MustCompile(`://[^/?#]*@`)
+
 func (s *Service) RegisterProject(ctx context.Context, p domain.Project) error {
 	if !keyRE.MatchString(p.Key) {
 		return domain.Err("validation", "project key must use lowercase letters, digits, dot, underscore or hyphen")
@@ -461,13 +506,8 @@ func (s *Service) RegisterProject(ctx context.Context, p domain.Project) error {
 			return err
 		}
 	}
-	if p.RemoteURL != "" {
-		u, err := url.Parse(p.RemoteURL)
-		if err == nil && u.User != nil {
-			if _, present := u.User.Password(); present {
-				return domain.Err("sensitive_content", "remote URL must not contain a password")
-			}
-		}
+	if err := checkRemoteURL(p.RemoteURL); err != nil {
+		return err
 	}
 	if p.LocalPath != "" && !filepath.IsAbs(p.LocalPath) {
 		return domain.Err("validation", "local_path must be absolute")
@@ -476,6 +516,33 @@ func (s *Service) RegisterProject(ctx context.Context, p domain.Project) error {
 	p.MemoryCount = 0
 	return s.store.RegisterProject(ctx, p)
 }
+
+// Audit rescans every stored record with the current credential patterns. Writes are scanned when they happen, so
+// records stored before a pattern existed are only found here. It reports IDs and keys, never content.
+func (s *Service) Audit(ctx context.Context) (domain.AuditResult, error) {
+	out := domain.AuditResult{FlaggedMemories: []string{}, FlaggedProjects: []string{}}
+	err := s.store.EachDocument(ctx, false, func(id string, document []byte) error {
+		out.Checked++
+		if scanContent(json.RawMessage(document)) != nil {
+			out.FlaggedMemories = append(out.FlaggedMemories, id)
+		}
+		return nil
+	})
+	if err != nil {
+		return out, err
+	}
+	err = s.store.EachDocument(ctx, true, func(key string, document []byte) error {
+		out.Checked++
+		var p domain.Project
+		_ = json.Unmarshal(document, &p)
+		if scanContent(json.RawMessage(document)) != nil || checkRemoteURL(p.RemoteURL) != nil {
+			out.FlaggedProjects = append(out.FlaggedProjects, key)
+		}
+		return nil
+	})
+	return out, err
+}
+
 func (s *Service) Projects(ctx context.Context, in domain.ProjectsInput) (domain.ProjectsResult, error) {
 	out := domain.ProjectsResult{Projects: []domain.Project{}}
 	if in.Register != nil {

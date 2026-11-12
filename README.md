@@ -75,6 +75,8 @@ Keep backups and exports out of public repositories. Never open an untrusted SQL
 - `busy`: another process holds a write lock. Retry after it completes; inspect unexpected long-running clients rather than disabling locking.
 - `conflict`: retrieve the current version and reconcile the change. Reusing an idempotency key with different content also conflicts.
 - `validation`: inspect required fields, scope, registration, timestamps, limits, or private path permissions.
+- `storage_full`: the database reached `max_db_mb` (or the disk is full). Raise `max_db_mb` in configuration or free disk space; archiving does not reclaim space. Nothing was written.
+- `limit`: 10,000 projects are registered. Projects cannot be removed. To drop a mistaken or squatted key, export, remove that project from the JSON offline (and any of its memories, which an import rejects if their project is missing), and import into a fresh database. This is covered by a test.
 - `sensitive_content`: remove credential-like content from the input. Do not bypass the check by encoding the secret.
 - `budget_exceeded`: request a larger budget within the configured ceiling. Retrieval never silently discards essential metadata.
 - `schema` or integrity failure: preserve the database and its associated state, stop writers, and recover from a validated backup. The server does not reset or rebuild data automatically.

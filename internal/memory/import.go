@@ -11,11 +11,19 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/domain"
 )
 
+// named adds the record to a credential rejection so a failed import says which record to fix.
+func named(err error, kind, id string) error {
+	if err != nil && domain.SafeError(err).Code == "sensitive_content" {
+		return domain.Err("sensitive_content", domain.SafeError(err).Message+" ("+kind+" "+id+")")
+	}
+	return err
+}
+
 func (s *Service) Import(ctx context.Context, data domain.Export) error {
 	if data.FormatVersion != 1 {
 		return domain.Err("validation", "unsupported export format")
 	}
-	if len(data.Memories) > 100000 || len(data.Projects) > 10000 || len(data.Receipts) > 200000 {
+	if len(data.Memories) > 100000 || len(data.Projects) > domain.MaxProjects || len(data.Receipts) > 200000 {
 		return domain.Err("validation", "import contains too many records")
 	}
 	if _, err := time.Parse(time.RFC3339Nano, data.ExportedAt); err != nil {
@@ -33,7 +41,10 @@ func (s *Service) Import(ctx context.Context, data domain.Export) error {
 			return domain.Err("validation", "local_path must be absolute")
 		}
 		if err := scan(p); err != nil {
-			return err
+			return named(err, "project", p.Key)
+		}
+		if err := checkRemoteURL(p.RemoteURL); err != nil {
+			return named(err, "project", p.Key)
 		}
 		if _, err := time.Parse(time.RFC3339Nano, p.CreatedAt); err != nil {
 			return domain.Err("validation", "invalid project timestamp")
@@ -52,7 +63,7 @@ func (s *Service) Import(ctx context.Context, data domain.Export) error {
 			return domain.Err("validation", "invalid or duplicate imported memory")
 		}
 		if err := scan(m); err != nil {
-			return err
+			return named(err, "memory", m.ID)
 		}
 		if m.ProjectKey != "" && !projects[m.ProjectKey] {
 			if err := s.project(ctx, m.ProjectKey); err != nil {
@@ -61,7 +72,7 @@ func (s *Service) Import(ctx context.Context, data domain.Export) error {
 		}
 		in := domain.UpsertInput{ID: m.ID, ExpectedVersion: m.Version, Scope: m.Scope, ProjectKey: m.ProjectKey, Type: m.Type, Title: m.Title, Content: m.Content, Tags: m.Tags, SourceAgent: m.SourceAgent, SourceReference: m.SourceReference, Evidence: m.Evidence, LastVerifiedAt: m.LastVerifiedAt, ExpiresAt: m.ExpiresAt, IdempotencyKey: m.IdempotencyKey}
 		if err := s.validate(ctx, &in, m.Handoff != nil, false); err != nil {
-			return err
+			return named(err, "memory", m.ID)
 		}
 		originalTags, _ := json.Marshal(m.Tags)
 		normalizedTags, _ := json.Marshal(in.Tags)
