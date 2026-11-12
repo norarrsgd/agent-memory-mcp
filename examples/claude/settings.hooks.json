@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "/absolute/path/to/agent-memory-mcp/bin/agent-memory hook" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "/absolute/path/to/agent-memory-mcp/bin/agent-memory hook" }] }
+    ],
+    "Stop": [
+      { "hooks": [{ "type": "command", "command": "/absolute/path/to/agent-memory-mcp/bin/agent-memory hook" }] }
+    ]
+  }
+}

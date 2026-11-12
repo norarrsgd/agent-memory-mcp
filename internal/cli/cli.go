@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/norarrsgd/agent-memory-mcp/internal/claudehook"
 	"github.com/norarrsgd/agent-memory-mcp/internal/config"
 	"github.com/norarrsgd/agent-memory-mcp/internal/domain"
 	"github.com/norarrsgd/agent-memory-mcp/internal/mcpserver"
@@ -22,7 +23,7 @@ import (
 )
 
 const usage = `agent-memory <command> [options]
-Commands: serve, doctor, status, backup, export, import, projects register/list
+Commands: serve, doctor, status, backup, export, import, projects register/list, hook (Claude Code hook; reads stdin)
 Run agent-memory <command> --help for command options.
 `
 
@@ -33,6 +34,14 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	}
 	command := args[0]
 	args = args[1:]
+	if command == "hook" {
+		// Stateless Claude Code hook: reads stdin and the transcript only, never opens the database.
+		if claudehook.Run(os.Stdin, out) != nil {
+			fmt.Fprintln(diagnostics, "hook output failed")
+			return 1
+		}
+		return 0
+	}
 	action := ""
 	if command == "projects" && len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		action = args[0]

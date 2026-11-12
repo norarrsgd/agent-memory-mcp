@@ -34,7 +34,13 @@ This command changes user configuration and is provided for review, not executed
 
 The server also sends a short usage convention in the MCP `instructions` field at initialize (search at task start, upsert before the final response, handoff before stopping), so clients that surface server instructions apply it without user-level files. Rebuild `bin/agent-memory` and restart Claude Code to pick up changes. This is not locally verified against Claude Code.
 
-Claude Code may defer MCP tool schemas, so the agent must load them (ToolSearch) before its first memory call; the sample instructions say so. Instructions remain advisory. To enforce the loop, configure Claude Code hooks yourself (for example a `SessionStart` hook that injects a search reminder and a `Stop` hook that blocks the final response until memory was written or skipped explicitly); hooks live in user settings and are not provided or modified by this repository.
+Claude Code may defer MCP tool schemas, so the agent must load them (ToolSearch) before its first memory call; the sample instructions say so. Instructions remain advisory, so the binary also ships an opt-in enforcement hook, `agent-memory hook`. Merge `examples/claude/settings.hooks.json` into `~/.claude/settings.json` (or `.claude/settings.local.json`) after replacing the path; this repository never edits Claude settings. One command serves three events and dispatches on `hook_event_name`:
+
+- `SessionStart` injects the loop, including the ToolSearch step for the deferred `mcp__agent-memory__*` tools.
+- `UserPromptSubmit` injects a short reminder on every prompt until the transcript contains a `memory_search` call, then goes quiet.
+- `Stop` blocks once when the turn used non-memory tools but never called `memory_upsert` or `memory_handoff`. The agent can satisfy it by writing memory or by stating `Memory: no durable change`. A `stop_hook_active` retry is always allowed, so it cannot loop.
+
+The hook is stateless and never opens the database: it reads the hook payload and the session transcript. It fails open on malformed input or a missing transcript. Limits: the search check is per session rather than per task, the Stop gate cannot judge whether a write was meaningful, and the transcript shape (`type`, `isMeta`, `isSidechain`, `message.content` blocks) is read from Claude Code's current JSONL format and is not a documented contract. Not verified against a live Claude Code session.
 
 ## Retrieval and handoff workflow
 
