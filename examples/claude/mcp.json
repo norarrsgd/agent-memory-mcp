@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "agent-memory": {
+      "type": "stdio",
+      "command": "/absolute/path/to/agent-memory-mcp/bin/agent-memory",
+      "args": ["serve"],
+      "env": {
+        "AGENT_MEMORY_DB_PATH": "/absolute/private/agent-memory/memory.db"
+      }
+    }
+  }
+}

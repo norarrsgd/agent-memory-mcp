@@ -1,0 +1,40 @@
+[
+  {
+    "tool": "memory_upsert",
+    "arguments": {
+      "scope": "project",
+      "project_key": "my-app",
+      "type": "lesson",
+      "title": "Migration validation needs an isolated database",
+      "content": "Preflight unit tests pass. Integration behavior remains unverified because the isolated test database is unavailable. Do not infer deployment readiness from the unit tests.",
+      "tags": ["migration", "testing"],
+      "source_agent": "codex",
+      "source_reference": "task:migration-validation",
+      "evidence": "observation",
+      "idempotency_key": "migration-validation-milestone-1"
+    }
+  },
+  {
+    "tool": "memory_handoff",
+    "arguments": {
+      "operation": "create",
+      "project_key": "my-app",
+      "task_identifier": "migration-validation",
+      "source_agent": "codex",
+      "status": "blocked",
+      "summary": "Preflight validation added; integration verification remains blocked.",
+      "completed_work": ["Added migration preflight validation", "Updated migration error handling"],
+      "blockers": ["Isolated integration database unavailable"],
+      "next_actions": ["Provision isolated test database", "Execute migration integration tests"],
+      "branch": "fix/migration-preflight",
+      "commit_reference": "abc123",
+      "committed_changes": ["Migration error handling in illustrative commit abc123"],
+      "uncommitted_changes": ["Preflight validation changes; inspect working tree before continuing"],
+      "verification_results": {"unit_tests": "passed", "integration_tests": "not_run"}
+    }
+  },
+  {
+    "tool": "memory_handoff",
+    "arguments": {"operation": "latest", "project_key": "my-app", "task_identifier": "migration-validation"}
+  }
+]

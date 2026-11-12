@@ -1,0 +1,13 @@
+/bin/
+/.cache/
+/.codegraph/
+/.worktrees/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+/exports/
+/backups/
+*.test
+coverage.out
+.DS_Store

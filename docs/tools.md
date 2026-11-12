@@ -1,0 +1,57 @@
+# MCP tool contracts
+
+Tool results are compact JSON in both MCP structured content and a text mirror. Domain failures have `isError: true` and `{"error":{"code":"...","message":"..."}}`, with optional `retryable` and `current_version`. SDK schema failures may use the SDK's standard validation error representation.
+
+IDs are lowercase UUIDv4. Project/task keys use lowercase letters, digits, `.`, `_`, or `-`, starting with a letter or digit, up to 80 characters. Agent labels are descriptive strings up to 80 characters. All tool input is bounded to 256 KiB.
+
+## memory_search
+
+Required: `query`. Optional: `scope`, `project_key`, `memory_types`, `tags`, `limit`, `max_response_chars`.
+
+Scopes: `global`, `project`, `project_global`. Omitting scope selects `project_global` if a project key is provided, otherwise `global`. Global scope rejects a project key; other scopes require a registered project. No all-project search exists.
+
+Types: `fact`, `decision`, `lesson`, `task`, `handoff`, `preference`. Types are OR filters; tags are AND filters. Tags are trimmed/lowercased/sorted/deduplicated. Queries use 1–32 literal Unicode terms joined with AND, up to 512 characters. Operators, quotes, and punctuation are not interpreted as raw FTS syntax. Empty or punctuation-only queries return validation errors.
+
+Results contain only `id`, `title`, `type`, optional `project`, `excerpt`, `score`, and `updated_at`. Scores are negated SQLite BM25 values; higher ranks first and scores are not probabilities. Ties use newest update then ID. Snippets contain at most 240 characters. Normal results exclude archived, superseded, and expired records. Budget pressure removes results and sets `budget_limited`; increase the budget or narrow the query when necessary.
+
+## memory_get
+
+Required: `id`. Optional: `max_response_chars`, `offset`, `version`.
+
+Returns `memory`, `truncated`, `total_chars`, and optional `next_offset`/`representation`. The memory contains version and provenance as well as content. Offset counts Unicode code points, not bytes or grapheme clusters. Continue with the returned offset and version until `truncated` is false. A changed version returns conflict rather than combining different revisions.
+
+Ordinary content uses `representation: "text"` when paginated. A full handoff has structured `memory.handoff` and searchable JSON `memory.content`. When oversized, `representation: "handoff_json"` identifies canonical handoff JSON chunks in `memory.content`; concatenate them before decoding. Structured handoff data is omitted on partial pages to avoid presenting a partial object as complete. Metadata is never silently removed; an insufficient metadata budget produces `budget_exceeded`.
+
+## memory_upsert
+
+Required: `scope`, `type`, `title`, `content`, `source_agent`. Project scope also requires `project_key`. Optional: `id`, `tags`, `source_reference`, `expected_version`, `idempotency_key`, `evidence`, `last_verified_at`, `expires_at`, `supersedes_id`, `supersedes_version`.
+
+Creation omits ID/version and returns `{id,version}` with version 1. Updates require ID and expected version; they replace editable fields rather than patching omitted optional fields. Scope, project, and type cannot change. Inactive records cannot be edited. Retrieve and preserve metadata you intend to retain. Unchanged content/metadata preserves the version and update timestamp.
+
+Use a stable idempotency key for retryable writes. Keys are scoped to global or the specific project; an identical canonical request returns the original result, even after later updates. Different data under the same key conflicts. A key does not provide fuzzy duplicate detection.
+
+Evidence defaults to `observation`; alternatives are `hypothesis`, `verified`, and `approved_decision`. Verified records require a source reference and last-verification timestamp. Approved decisions require decision type and a supporting source reference. These are explicit provenance claims, not authenticated approvals. Timestamps accept RFC3339 and are normalized to UTC; future verification times are rejected.
+
+To supersede a fact, create its replacement with `supersedes_id` and `supersedes_version`. Both records must share scope/project; the old active record becomes superseded and points at the replacement transactionally. Updating an existing replacement through the supersession option is rejected. Handoff creation uses its dedicated tool.
+
+## memory_handoff
+
+Required: `operation`, `project_key`. For `latest`, optionally provide `task_identifier`; the tool returns a compact ID/version/update/task reference. It selects the newest active `blocked` or `in_progress` handoff, breaking ties by ID. Retrieve the returned memory ID separately.
+
+For `create`/`update`, provide `task_identifier`, `source_agent`, `status`, and `summary`. Updates also require ID and expected version. Task identity, project, and memory type are immutable. Creating another handoff never overwrites an existing one implicitly.
+
+Optional structured fields: `completed_work`, `blockers`, `next_actions`, `branch`, `commit_reference`, `committed_changes`, `uncommitted_changes`, `verification_results`, `related_memory_ids`, and `source_reference`.
+
+Statuses are `in_progress`, `blocked`, and `completed`; completion excludes the record from latest-active lookup. Summary allows 1,000 characters; work/blocker/action/change lists allow 20 items of 512 characters each. Verification maps allow 20 entries; keys allow 80 and values 512 characters. Branch/commit labels allow 256 characters. Related memories must belong to this project or global scope.
+
+Treat recorded commits and working-tree changes as historical claims. The receiving agent must independently check the repository, including uncommitted changes. Handoff content is structured data and never an executable workflow.
+
+## memory_archive
+
+Required: `id`, `expected_version`. Optional: `reason` (up to 512 characters).
+
+Archive an active record and increment its version. Repeated/stale calls conflict. Archived records remain available through `memory_get`; there is no physical-delete tool.
+
+## memory_projects
+
+Optional: `limit` (default 10, maximum 20), `after` (previous `next_cursor`). Returns bounded project metadata, active/nonexpired memory counts, and an optional continuation cursor. Global memories are not counted toward any project. Registration is CLI-only and never inferred from directory names.

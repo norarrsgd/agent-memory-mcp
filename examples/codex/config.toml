@@ -1,0 +1,7 @@
+# Merge this stanza into ~/.codex/config.toml after replacing placeholder paths.
+[mcp_servers.agent-memory]
+command = "/absolute/path/to/agent-memory-mcp/bin/agent-memory"
+args = ["serve"]
+
+[mcp_servers.agent-memory.env]
+AGENT_MEMORY_DB_PATH = "/absolute/private/agent-memory/memory.db"
