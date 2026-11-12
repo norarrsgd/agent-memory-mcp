@@ -70,8 +70,8 @@ type UpsertInput struct {
 	SourceReference   string   `json:"source_reference,omitempty"`
 	ExpectedVersion   int64    `json:"expected_version,omitempty"`
 	IdempotencyKey    string   `json:"idempotency_key,omitempty"`
-	Evidence          string   `json:"evidence,omitempty"`
-	LastVerifiedAt    string   `json:"last_verified_at,omitempty"`
+	Evidence          string   `json:"evidence,omitempty" jsonschema:"observation (default), hypothesis, verified, or approved_decision. verified requires source_reference and last_verified_at; approved_decision requires type decision and source_reference"`
+	LastVerifiedAt    string   `json:"last_verified_at,omitempty" jsonschema:"RFC3339 time the claim was checked, e.g. 2026-11-12T14:30:00Z. Required when evidence is verified; rejected for other evidence except approved_decision; must not be in the future"`
 	ExpiresAt         string   `json:"expires_at,omitempty"`
 	SupersedesID      string   `json:"supersedes_id,omitempty"`
 	SupersedesVersion int64    `json:"supersedes_version,omitempty"`

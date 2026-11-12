@@ -40,7 +40,7 @@ func New(s *memory.Service, max int) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "agent-memory", Version: "0.1.0"}, nil)
 	add(server, &mcp.Tool{Name: "memory_search", Description: "Find compact memory references; retrieve relevant IDs separately."}, max, s.Search)
 	add(server, &mcp.Tool{Name: "memory_get", Description: "Retrieve one memory; continue truncated content using offset and version."}, max, s.Get)
-	add(server, &mcp.Tool{Name: "memory_upsert", Description: "Create or update memory; updates require expected_version."}, max, s.Upsert)
+	add(server, &mcp.Tool{Name: "memory_upsert", Description: "Create or update memory; updates require expected_version. Evidence defaults to observation. evidence=verified requires source_reference and last_verified_at (RFC3339, not future); approved_decision requires type=decision and source_reference."}, max, s.Upsert)
 	add(server, &mcp.Tool{Name: "memory_handoff", Description: "Create, update, or find the latest active project handoff."}, max, s.Handoff)
 	add(server, &mcp.Tool{Name: "memory_archive", Description: "Archive an active memory using expected_version."}, max, s.Archive)
 	add(server, &mcp.Tool{

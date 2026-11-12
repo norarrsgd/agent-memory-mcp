@@ -217,7 +217,7 @@ func (s *Service) validate(ctx context.Context, in *domain.UpsertInput, allowHan
 		return err
 	}
 	if in.Evidence == "verified" && in.LastVerifiedAt == "" {
-		return domain.Err("validation", "verified evidence requires last_verified_at")
+		return domain.Err("validation", "verified evidence requires last_verified_at (RFC3339, e.g. 2026-11-12T14:30:00Z)")
 	}
 	if in.LastVerifiedAt != "" {
 		t, _ := time.Parse(time.RFC3339Nano, in.LastVerifiedAt)

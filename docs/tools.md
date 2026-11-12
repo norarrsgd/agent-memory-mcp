@@ -30,7 +30,7 @@ Creation omits ID/version and returns `{id,version}` with version 1. Updates req
 
 Use a stable idempotency key for retryable writes. Keys are scoped to global or the specific project; an identical canonical request returns the original result, even after later updates. Different data under the same key conflicts. A key does not provide fuzzy duplicate detection.
 
-Evidence defaults to `observation`; alternatives are `hypothesis`, `verified`, and `approved_decision`. Verified records require a source reference and last-verification timestamp. Approved decisions require decision type and a supporting source reference. These are explicit provenance claims, not authenticated approvals. Timestamps accept RFC3339 and are normalized to UTC; future verification times are rejected.
+Evidence defaults to `observation`; alternatives are `hypothesis`, `verified`, and `approved_decision`. Verified records require a source reference and last-verification timestamp. Approved decisions require decision type and a supporting source reference. These are explicit provenance claims, not authenticated approvals. Timestamps accept RFC3339 and are normalized to UTC; future verification times are rejected. `last_verified_at` is accepted only with `verified` or `approved_decision` evidence. The tool description and input schema state these dependencies so agents see them at call time.
 
 To supersede a fact, create its replacement with `supersedes_id` and `supersedes_version`. Both records must share scope/project; the old active record becomes superseded and points at the replacement transactionally. Updating an existing replacement through the supersession option is rejected. Handoff creation uses its dedicated tool.
 

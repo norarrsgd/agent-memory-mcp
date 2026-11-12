@@ -11,6 +11,7 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/storage/sqlite"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -42,6 +43,15 @@ func TestDiscoveryInvocationAndErrors(t *testing.T) {
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil || len(tools.Tools) != 6 {
 		t.Fatalf("tools %+v %v", tools, err)
+	}
+	for _, tool := range tools.Tools {
+		if tool.Name != "memory_upsert" {
+			continue
+		}
+		schema, _ := json.Marshal(tool.InputSchema)
+		if !bytes.Contains(schema, []byte("RFC3339")) || !strings.Contains(tool.Description, "last_verified_at") {
+			t.Fatalf("evidence guidance missing: %s %s", tool.Description, schema)
+		}
 	}
 	args := map[string]any{"scope": "global", "type": "fact", "title": "Protocol test", "content": "SQLite safe", "source_agent": "test"}
 	r, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "memory_upsert", Arguments: args})
