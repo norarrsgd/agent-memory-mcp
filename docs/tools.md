@@ -54,4 +54,6 @@ Archive an active record and increment its version. Repeated/stale calls conflic
 
 ## memory_projects
 
-Optional: `limit` (default 10, maximum 20), `after` (previous `next_cursor`). Returns bounded project metadata, active/nonexpired memory counts, and an optional continuation cursor. Global memories are not counted toward any project. Registration is CLI-only and never inferred from directory names.
+Call with `{}` for the first page. Optional: `limit` (1–20; omitted or 0 defaults to 10), `after` (copy the previous response's `next_cursor`, not a page number or repository path). The advertised MCP schema includes the limit range/default and cursor format; invalid pagination identifies the offending field.
+
+Returns bounded project metadata, active/nonexpired memory counts, and an optional continuation cursor. Global memories are not counted toward any project. Registration is CLI-only and never inferred from directory names.

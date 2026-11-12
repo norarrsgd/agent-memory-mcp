@@ -9,8 +9,8 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/memory"
 )
 
-func add[In, Out any](server *mcp.Server, name, description string, max int, fn func(context.Context, In) (Out, error)) {
-	mcp.AddTool(server, &mcp.Tool{Name: name, Description: description}, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
+func add[In, Out any](server *mcp.Server, tool *mcp.Tool, max int, fn func(context.Context, In) (Out, error)) {
+	mcp.AddTool(server, tool, func(ctx context.Context, req *mcp.CallToolRequest, in In) (*mcp.CallToolResult, any, error) {
 		if err := domain.CheckInputSize(in); err != nil {
 			return toolError(err)
 		}
@@ -38,11 +38,26 @@ func toolError(err error) (*mcp.CallToolResult, any, error) {
 }
 func New(s *memory.Service, max int) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "agent-memory", Version: "0.1.0"}, nil)
-	add(server, "memory_search", "Find compact memory references; retrieve relevant IDs separately.", max, s.Search)
-	add(server, "memory_get", "Retrieve one memory; continue truncated content using offset and version.", max, s.Get)
-	add(server, "memory_upsert", "Create or update memory; updates require expected_version.", max, s.Upsert)
-	add(server, "memory_handoff", "Create, update, or find the latest active project handoff.", max, s.Handoff)
-	add(server, "memory_archive", "Archive an active memory using expected_version.", max, s.Archive)
-	add(server, "memory_projects", "List registered projects and active memory counts.", max, s.Projects)
+	add(server, &mcp.Tool{Name: "memory_search", Description: "Find compact memory references; retrieve relevant IDs separately."}, max, s.Search)
+	add(server, &mcp.Tool{Name: "memory_get", Description: "Retrieve one memory; continue truncated content using offset and version."}, max, s.Get)
+	add(server, &mcp.Tool{Name: "memory_upsert", Description: "Create or update memory; updates require expected_version."}, max, s.Upsert)
+	add(server, &mcp.Tool{Name: "memory_handoff", Description: "Create, update, or find the latest active project handoff."}, max, s.Handoff)
+	add(server, &mcp.Tool{Name: "memory_archive", Description: "Archive an active memory using expected_version."}, max, s.Archive)
+	add(server, &mcp.Tool{
+		Name: "memory_projects", Description: "List projects and active memory counts. Call with {} for the first page.",
+		InputSchema: map[string]any{
+			"type": "object", "additionalProperties": false,
+			"properties": map[string]any{
+				"limit": map[string]any{
+					"type": "integer", "minimum": 0, "maximum": 20, "default": 10,
+					"description": "Page size, at most 20; omit or use 0 for default 10.",
+				},
+				"after": map[string]any{
+					"type": "string", "maxLength": 80, "pattern": "^([a-z0-9][a-z0-9._-]{0,79})?$",
+					"description": "Omit for the first page; otherwise copy next_cursor from the previous response.",
+				},
+			},
+		},
+	}, max, s.Projects)
 	return server
 }

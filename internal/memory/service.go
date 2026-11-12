@@ -481,8 +481,11 @@ func (s *Service) Projects(ctx context.Context, in domain.ProjectsInput) (domain
 	if in.Limit == 0 {
 		in.Limit = 10
 	}
-	if in.Limit < 1 || in.Limit > 20 || (in.After != "" && !keyRE.MatchString(in.After)) {
-		return out, domain.Err("validation", "invalid project pagination")
+	if in.Limit < 1 || in.Limit > 20 {
+		return out, domain.Err("validation", "limit must be 0..20; omit or use 0 for default 10")
+	}
+	if in.After != "" && !keyRE.MatchString(in.After) {
+		return out, domain.Err("validation", "after must be a project key from next_cursor, up to 80 lowercase letters, digits, dots, underscores or hyphens; omit it for the first page")
 	}
 	ps, err := s.store.Projects(ctx, in.After, in.Limit+1)
 	if err != nil {

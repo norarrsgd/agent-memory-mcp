@@ -26,6 +26,8 @@ Do not manually launch the MCP server during this implementation's verification;
 
 Project identity is explicit. Default project searches include global records and never another project's records. Updates require expected versions. Idempotency keys cannot accept a different canonical request. FTS and content changes share a transaction. All persisted text passes validation and secret checks through the service. Storage imports are internal primitives and must only receive service-validated snapshots.
 
+`memory_projects` advertises pagination limits and cursor format in its MCP input schema. Omitted or zero limits use 10; explicit page sizes are capped at 20. Use the returned `next_cursor` as `after`, never a page number or filesystem path. Service validation reports limit and cursor errors separately; keep the schema, validation, and protocol tests consistent.
+
 Preserve current data on migration, import, and backup failure. Do not add silent repair, forced overwrite, physical deletion, raw SQL/filesystem MCP tools, or content-bearing logs. Agent source/evidence labels are claims, not authenticated identities or approvals.
 
 See README for setup and recovery; `docs/architecture.md`, `docs/configuration.md`, `docs/tools.md`, `docs/security.md`, `docs/agent-integration.md`, and `docs/performance.md` provide deeper operational contracts.
