@@ -44,7 +44,7 @@ func New(s *memory.Service, max int) *mcp.Server {
 	add(server, &mcp.Tool{Name: "memory_handoff", Description: "Create, update, or find the latest active project handoff."}, max, s.Handoff)
 	add(server, &mcp.Tool{Name: "memory_archive", Description: "Archive an active memory using expected_version."}, max, s.Archive)
 	add(server, &mcp.Tool{
-		Name: "memory_projects", Description: "List projects and active memory counts. Call with {} for the first page.",
+		Name: "memory_projects", Description: "List projects and active memory counts (call with {} for the first page), or register one via register. Match the repository's absolute path against local_path before registering; identical registration succeeds, a conflicting key or path returns a conflict.",
 		InputSchema: map[string]any{
 			"type": "object", "additionalProperties": false,
 			"properties": map[string]any{
@@ -55,6 +55,17 @@ func New(s *memory.Service, max int) *mcp.Server {
 				"after": map[string]any{
 					"type": "string", "maxLength": 80, "pattern": "^([a-z0-9][a-z0-9._-]{0,79})?$",
 					"description": "Omit for the first page; otherwise copy next_cursor from the previous response.",
+				},
+				"register": map[string]any{
+					"type": "object", "additionalProperties": false, "required": []string{"key", "local_path"},
+					"description": "Register instead of listing; ignores limit and cannot be combined with after. Returns key, created_at and memory_count.",
+					"properties": map[string]any{
+						"key":          map[string]any{"type": "string", "maxLength": 80, "pattern": "^[a-z0-9][a-z0-9._-]{0,79}$", "description": "Explicit stable project key; never derive it implicitly."},
+						"local_path":   map[string]any{"type": "string", "maxLength": 1024, "description": "Absolute repository path, passed explicitly by the agent."},
+						"remote_url":   map[string]any{"type": "string", "maxLength": 512},
+						"organization": map[string]any{"type": "string", "maxLength": 160},
+						"description":  map[string]any{"type": "string", "maxLength": 1000},
+					},
 				},
 			},
 		},

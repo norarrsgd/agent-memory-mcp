@@ -147,6 +147,8 @@ type HandoffInput struct {
 type ProjectsInput struct {
 	Limit int    `json:"limit,omitempty"`
 	After string `json:"after,omitempty"`
+	// Register switches the call from listing to registering one project.
+	Register *Project `json:"register,omitempty"`
 }
 type ProjectsResult struct {
 	Projects   []Project `json:"projects"`

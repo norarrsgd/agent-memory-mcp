@@ -26,7 +26,7 @@ CGO_ENABLED=0 go build -trimpath -o bin/agent-memory ./cmd/agent-memory
 ./bin/agent-memory status
 ```
 
-Project keys are explicit and stable when repository directories move. Optional remote URL, local path, and organization are metadata only; registration never reads a repository or runs Git. Re-registering identical metadata succeeds; conflicting registration fails instead of silently changing identity.
+Project keys are explicit and stable when repository directories move. Optional remote URL, local path, and organization are metadata only; registration never reads a repository or runs Git. Agents can also register through `memory_projects` with `register`, which returns a compact acknowledgement while retaining full metadata for listing. Re-registering identical metadata succeeds; conflicting registration fails instead of silently changing identity. Repository paths are cleaned lexically, and registration/import reject a path owned by another key. Symlinks and filesystem case aliases are not resolved.
 
 Default database: `~/.local/share/agent-memory/memory.db`. Its application directory must be private (`0700`), and files must be private (`0600`). A configured override must be an absolute local filesystem path with a private immediate parent. Resolve filesystem aliases before supplying a path; symlink components are rejected.
 

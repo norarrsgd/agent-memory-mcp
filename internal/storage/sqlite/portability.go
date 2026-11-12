@@ -83,17 +83,30 @@ func (s *Store) Export(ctx context.Context) (domain.Export, error) {
 }
 func (s *Store) Import(ctx context.Context, data domain.Export) error {
 	return s.transaction(ctx, func(c *sql.Conn) error {
+		paths, err := projectPaths(ctx, c)
+		if err != nil {
+			return err
+		}
 		for _, p := range data.Projects {
+			p = normalizeProject(p)
 			b, _ := json.Marshal(p)
 			var old []byte
 			err := c.QueryRowContext(ctx, "SELECT document FROM projects WHERE key=?", p.Key).Scan(&old)
 			if err == nil {
-				if string(old) != string(b) {
+				var existing domain.Project
+				if json.Unmarshal(old, &existing) != nil {
+					return domain.Err("storage_failure", "invalid project")
+				}
+				normalized, _ := json.Marshal(normalizeProject(existing))
+				if string(normalized) != string(b) {
 					return domain.Err("conflict", "import project metadata conflicts")
 				}
 				continue
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+			if err := claimProjectPath(paths, p); err != nil {
 				return err
 			}
 			if _, err = c.ExecContext(ctx, "INSERT INTO projects VALUES(?,?)", p.Key, b); err != nil {

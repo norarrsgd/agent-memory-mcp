@@ -28,6 +28,8 @@ Project identity is explicit. Default project searches include global records an
 
 `memory_projects` advertises pagination limits and cursor format in its MCP input schema. Omitted or zero limits use 10; explicit page sizes are capped at 20. Use the returned `next_cursor` as `after`, never a page number or filesystem path. Service validation reports limit and cursor errors separately; keep the schema, validation, and protocol tests consistent.
 
+Project registration is available through the CLI and `memory_projects.register`. Registration returns a compact acknowledgement, not full metadata, so a successful write fits the minimum response budget. Storage cleans new repository paths lexically and checks ownership inside the same write transaction for both registration and import. Imports load ownership once and reject collisions with stored or earlier imported projects atomically. Existing path spellings are compared after cleaning without rewriting historical metadata; symlink and case aliases are not resolved.
+
 Preserve current data on migration, import, and backup failure. Do not add silent repair, forced overwrite, physical deletion, raw SQL/filesystem MCP tools, or content-bearing logs. Agent source/evidence labels are claims, not authenticated identities or approvals.
 
 See README for setup and recovery; `docs/architecture.md`, `docs/configuration.md`, `docs/tools.md`, `docs/security.md`, `docs/agent-integration.md`, and `docs/performance.md` provide deeper operational contracts.

@@ -56,4 +56,10 @@ Archive an active record and increment its version. Repeated/stale calls conflic
 
 Call with `{}` for the first page. Optional: `limit` (1–20; omitted or 0 defaults to 10), `after` (copy the previous response's `next_cursor`, not a page number or repository path). The advertised MCP schema includes the limit range/default and cursor format; invalid pagination identifies the offending field.
 
-Returns bounded project metadata, active/nonexpired memory counts, and an optional continuation cursor. Global memories are not counted toward any project. Registration is CLI-only and never inferred from directory names.
+Returns bounded project metadata, active/nonexpired memory counts, and an optional continuation cursor. Global memories are not counted toward any project.
+
+Register one project by passing `register` instead of pagination: `{"register":{"key":"my-repo","local_path":"/abs/path"}}` (`key` and absolute `local_path` required; `remote_url`, `organization`, `description` optional). `register` ignores `limit` (the schema defaults it to 10) and cannot be combined with `after`. The response contains one compact project acknowledgement with `key`, `created_at`, and `memory_count`; full metadata remains stored and is returned by listing. This keeps successful registrations within the minimum response budget.
+
+Identical re-registration succeeds; the same key with different metadata, or a `local_path` already held by another key, returns `conflict` and changes nothing. New paths are cleaned lexically: trailing separators, `.` and `..` do not create different identities. Existing records are compared using cleaned paths without rewriting their metadata. No symlink resolution, filesystem access, or case folding is performed. Imports enforce the same ownership rule within their transaction, including conflicts among imported projects; a conflict rolls back the whole import.
+
+Keys are never inferred from directory names, and agents must pass the repository path explicitly because the server working directory may differ. Recommended flow: page through the list looking for a matching cleaned `local_path`; if none matches, propose a key from the folder name, then register it.

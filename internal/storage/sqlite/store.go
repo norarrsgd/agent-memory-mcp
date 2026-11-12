@@ -247,6 +247,7 @@ func (s *Store) ProjectExists(ctx context.Context, key string) error {
 	return mapError(s.read.QueryRowContext(ctx, "SELECT 1 FROM projects WHERE key=?", key).Scan(&n))
 }
 func (s *Store) RegisterProject(ctx context.Context, p domain.Project) error {
+	p = normalizeProject(p)
 	return s.transaction(ctx, func(c *sql.Conn) error {
 		var old []byte
 		err := c.QueryRowContext(ctx, "SELECT document FROM projects WHERE key=?", p.Key).Scan(&old)
@@ -257,12 +258,20 @@ func (s *Store) RegisterProject(ctx context.Context, p domain.Project) error {
 			}
 			p.CreatedAt = existing.CreatedAt
 			b, _ := json.Marshal(p)
-			if string(old) == string(b) {
+			normalized, _ := json.Marshal(normalizeProject(existing))
+			if string(normalized) == string(b) {
 				return nil
 			}
 			return domain.Err("conflict", "project already registered with different metadata")
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		paths, err := projectPaths(ctx, c)
+		if err != nil {
+			return err
+		}
+		if err := claimProjectPath(paths, p); err != nil {
 			return err
 		}
 		p.CreatedAt = now()
@@ -273,6 +282,61 @@ func (s *Store) RegisterProject(ctx context.Context, p domain.Project) error {
 		_, err = c.ExecContext(ctx, "INSERT INTO projects VALUES(?,?)", p.Key, b)
 		return err
 	})
+}
+
+func normalizeProject(p domain.Project) domain.Project {
+	if p.LocalPath != "" {
+		p.LocalPath = filepath.Clean(p.LocalPath)
+	}
+	return p
+}
+
+func projectPaths(ctx context.Context, c *sql.Conn) (map[string]string, error) {
+	rows, err := c.QueryContext(ctx, "SELECT key, coalesce(json_extract(document,'$.local_path'),'') FROM projects ORDER BY key")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	paths := make(map[string]string)
+	for rows.Next() {
+		var key, path string
+		if err := rows.Scan(&key, &path); err != nil {
+			return nil, err
+		}
+		if path != "" {
+			path = filepath.Clean(path)
+			if _, exists := paths[path]; !exists {
+				paths[path] = key
+			}
+		}
+	}
+	return paths, rows.Err()
+}
+
+func claimProjectPath(paths map[string]string, p domain.Project) error {
+	if p.LocalPath == "" {
+		return nil
+	}
+	if other, exists := paths[p.LocalPath]; exists && other != p.Key {
+		return domain.Err("conflict", "local_path is already registered under project key "+other)
+	}
+	paths[p.LocalPath] = p.Key
+	return nil
+}
+
+func (s *Store) Project(ctx context.Context, key string) (domain.Project, error) {
+	var b []byte
+	var n int
+	err := s.read.QueryRowContext(ctx, `SELECT p.document,(SELECT count(*) FROM memories m WHERE m.project_key=p.key AND m.status='active' AND (m.expires_at IS NULL OR m.expires_at>?)) FROM projects p WHERE p.key=?`, now(), key).Scan(&b, &n)
+	if err != nil {
+		return domain.Project{}, mapError(err)
+	}
+	var p domain.Project
+	if json.Unmarshal(b, &p) != nil {
+		return domain.Project{}, domain.Err("storage_failure", "invalid project")
+	}
+	p.MemoryCount = n
+	return p, nil
 }
 func (s *Store) Projects(ctx context.Context, after string, limit int) ([]domain.Project, error) {
 	rows, err := s.read.QueryContext(ctx, `SELECT p.document,(SELECT count(*) FROM memories m WHERE m.project_key=p.key AND m.status='active' AND (m.expires_at IS NULL OR m.expires_at>?)) FROM projects p WHERE p.key>? ORDER BY p.key LIMIT ?`, now(), after, limit)

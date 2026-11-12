@@ -478,6 +478,20 @@ func (s *Service) RegisterProject(ctx context.Context, p domain.Project) error {
 }
 func (s *Service) Projects(ctx context.Context, in domain.ProjectsInput) (domain.ProjectsResult, error) {
 	out := domain.ProjectsResult{Projects: []domain.Project{}}
+	if in.Register != nil {
+		if in.After != "" {
+			return out, domain.Err("validation", "register cannot be combined with after")
+		}
+		if in.Register.LocalPath == "" {
+			return out, domain.Err("validation", "register requires local_path")
+		}
+		if err := s.RegisterProject(ctx, *in.Register); err != nil {
+			return out, err
+		}
+		p, err := s.store.Project(ctx, in.Register.Key)
+		out.Projects = append(out.Projects, domain.Project{Key: p.Key, CreatedAt: p.CreatedAt, MemoryCount: p.MemoryCount})
+		return out, err
+	}
 	if in.Limit == 0 {
 		in.Limit = 10
 	}

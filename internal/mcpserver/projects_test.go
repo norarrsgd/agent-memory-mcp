@@ -140,3 +140,93 @@ func TestProjectsPaginationContract(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectsRegisterOverMCP(t *testing.T) {
+	ctx := context.Background()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(filepath.Join(dir, "private", "db"), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	server := New(memory.New(store, config.Config{SearchLimit: 5, MaxResponseChars: 8000}), 8000)
+	a, b := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "register-test", Version: "1"}, nil).Connect(ctx, b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	call := func(path string) *mcp.CallToolResult {
+		r, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "memory_projects", Arguments: map[string]any{"register": map[string]any{"key": "repo", "local_path": path}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	if r := call("/work/repo"); r.IsError {
+		t.Fatalf("register failed: %+v", r)
+	}
+	if r := call("/work/repo"); r.IsError {
+		t.Fatalf("identical registration failed: %+v", r)
+	}
+	raw, _ := json.Marshal(call("/work/moved"))
+	if !strings.Contains(string(raw), `"isError":true`) || !strings.Contains(string(raw), "conflict") {
+		t.Fatalf("expected conflict, got %s", raw)
+	}
+}
+
+func TestProjectRegistrationFitsMinimumResponseBudget(t *testing.T) {
+	ctx := context.Background()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(filepath.Join(dir, "private", "db"), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	server := New(memory.New(store, config.Config{SearchLimit: 5, MaxResponseChars: 1024}), 1024)
+	a, b := mcp.NewInMemoryTransports()
+	ss, err := server.Connect(ctx, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "budget-test", Version: "1"}, nil).Connect(ctx, b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	args := map[string]any{"register": map[string]any{"key": strings.Repeat("a", 80), "local_path": "/work/repo/", "description": strings.Repeat("x", 1000)}}
+	for i := 0; i < 2; i++ {
+		result, err := cs.CallTool(ctx, &mcp.CallToolParams{Name: "memory_projects", Arguments: args})
+		if err != nil || result.IsError {
+			t.Fatalf("registration committed but acknowledgement failed: %+v %v", result, err)
+		}
+		wire, _ := json.Marshal(result)
+		if len([]rune(string(wire))) > 1024 {
+			t.Fatalf("response exceeded budget: %d", len([]rune(string(wire))))
+		}
+		raw, _ := json.Marshal(result.StructuredContent)
+		var response domain.ProjectsResult
+		if err = json.Unmarshal(raw, &response); err != nil {
+			t.Fatal(err)
+		}
+		if len(response.Projects) != 1 || response.Projects[0].Key != strings.Repeat("a", 80) || response.Projects[0].CreatedAt == "" {
+			t.Fatalf("missing registration acknowledgement: %s", raw)
+		}
+	}
+	stored, err := store.Project(ctx, strings.Repeat("a", 80))
+	if err != nil || len(stored.Description) != 1000 {
+		t.Fatalf("registration lost metadata: %+v %v", stored, err)
+	}
+}
