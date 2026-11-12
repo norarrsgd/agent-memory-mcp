@@ -32,10 +32,14 @@ claude mcp add --transport stdio --scope user agent-memory --env AGENT_MEMORY_DB
 
 This command changes user configuration and is provided for review, not executed automatically. Inspect the entry with `claude mcp get agent-memory`. Review and append `examples/claude/CLAUDE.md` to your existing global Claude instructions without overwriting them.
 
+The server also sends a short usage convention in the MCP `instructions` field at initialize (search at task start, upsert before the final response, handoff before stopping), so clients that surface server instructions apply it without user-level files. Rebuild `bin/agent-memory` and restart Claude Code to pick up changes. This is not locally verified against Claude Code.
+
+Claude Code may defer MCP tool schemas, so the agent must load them (ToolSearch) before its first memory call; the sample instructions say so. Instructions remain advisory. To enforce the loop, configure Claude Code hooks yourself (for example a `SessionStart` hook that injects a search reminder and a `Stop` hook that blocks the final response until memory was written or skipped explicitly); hooks live in user settings and are not provided or modified by this repository.
+
 ## Retrieval and handoff workflow
 
 1. Select an explicitly registered project key using `memory_projects` and project context. Never equate similarly named directories automatically.
-2. Search only when previous context could help. Project searches include global preferences; use explicit project-only scope when appropriate.
+2. Search once at the start of each task, scoped to its topic. Project searches include global preferences; use explicit project-only scope when appropriate.
 3. Retrieve selected IDs; follow version-guarded continuation only when necessary.
 4. Verify stored conclusions against current code, approved documentation, and task records.
 5. Persist meaningful changes with provenance and accurate evidence labels, not routine commands or conversations.
