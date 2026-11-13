@@ -12,3 +12,4 @@
 *.test
 coverage.out
 .DS_Store
+/docs/plans/
