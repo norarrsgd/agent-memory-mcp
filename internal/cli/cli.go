@@ -19,11 +19,12 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/domain"
 	"github.com/norarrsgd/agent-memory-mcp/internal/mcpserver"
 	"github.com/norarrsgd/agent-memory-mcp/internal/memory"
+	"github.com/norarrsgd/agent-memory-mcp/internal/snapshot"
 	"github.com/norarrsgd/agent-memory-mcp/internal/storage/sqlite"
 )
 
 const usage = `agent-memory <command> [options]
-Commands: serve, doctor, status, backup, export, import, projects register/list, hook (Claude Code hook; reads stdin)
+Commands: serve, doctor, status, backup, export, import, view, projects register/list, hook (Claude Code hook; reads stdin)
 Run agent-memory <command> --help for command options.
 `
 
@@ -48,7 +49,7 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 		args = args[1:]
 	}
 	switch command {
-	case "serve", "doctor", "status", "backup", "export", "import", "projects":
+	case "serve", "doctor", "status", "backup", "export", "import", "view", "projects":
 	default:
 		fmt.Fprintln(diagnostics, "unknown command; use --help")
 		return 2
@@ -59,14 +60,18 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	dbPath := fs.String("db-path", "", "absolute database path")
 	var output, input, key, remote, local, organization, description string
 	var searchLimit, response, busy int
-	var rescan, flagged bool
+	var rescan, flagged, inactive bool
 	var logLevel string
 	fs.IntVar(&searchLimit, "search-limit", 0, "default search result count (1..20)")
 	fs.IntVar(&response, "max-response-chars", 0, "response ceiling (1024..32000)")
 	fs.IntVar(&busy, "busy-timeout-ms", 0, "SQLite busy timeout (1..30000)")
 	fs.StringVar(&logLevel, "log-level", "", "error, info or debug")
-	if command == "backup" || command == "export" {
+	if command == "backup" || command == "export" || command == "view" {
 		fs.StringVar(&output, "output", "", "absolute private output path; never overwritten")
+	}
+	if command == "view" {
+		fs.StringVar(&key, "project", "", "limit the snapshot to one registered project key")
+		fs.BoolVar(&inactive, "include-inactive", false, "also include superseded, archived and expired records")
 	}
 	if command == "doctor" {
 		fs.BoolVar(&rescan, "scan", false, "also rescan stored records for credential patterns; reports IDs only and exits 1 if any match")
@@ -189,6 +194,8 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 			}
 		}
 		result = map[string]any{"output": output}
+	case "view":
+		result, err = snapshot.Write(ctx, svc, c.DBPath, output, snapshot.Options{ProjectKey: key, IncludeInactive: inactive}, time.Now())
 	case "import":
 		var snapshot domain.Export
 		snapshot, err = readExport(input)
@@ -214,35 +221,7 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	return 0
 }
 func writeExport(path string, data domain.Export) error {
-	if err := sqlite.PrivatePath(path, true); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".agent-memory-export-*")
-	if err != nil {
-		return err
-	}
-	temporary := f.Name()
-	defer os.Remove(temporary)
-	if err = json.NewEncoder(f).Encode(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	if err = os.Link(temporary, path); err != nil {
-		return domain.Err("conflict", "export destination already exists or cannot be published")
-	}
-	dir, err := os.Open(filepath.Dir(path))
-	if err != nil {
-		return err
-	}
-	defer dir.Close()
-	return dir.Sync()
+	return sqlite.WritePrivateFile(path, func(w io.Writer) error { return json.NewEncoder(w).Encode(data) })
 }
 func readExport(path string) (domain.Export, error) {
 	var data domain.Export

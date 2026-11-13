@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -105,5 +106,39 @@ func TestDoctorScanExitsNonZeroOnFlaggedRecords(t *testing.T) {
 	out.Reset()
 	if code := Run(context.Background(), []string{"doctor"}, &out, &diagnostics); code != 0 {
 		t.Fatalf("plain doctor must stay informational about content: %d", code)
+	}
+}
+
+func TestViewWritesPrivateSnapshot(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", dir)
+	run := func(args ...string) (int, string, string) {
+		var out, diagnostics bytes.Buffer
+		code := Run(context.Background(), args, &out, &diagnostics)
+		return code, out.String(), diagnostics.String()
+	}
+	if code, _, d := run("projects", "register", "--key", "alpha"); code != 0 {
+		t.Fatalf("register: %d %s", code, d)
+	}
+	target := filepath.Join(dir, "views", "one.html")
+	code, out, d := run("view", "--project", "alpha", "--output", target)
+	if code != 0 || !strings.Contains(out, target) {
+		t.Fatalf("view: %d %s %s", code, out, d)
+	}
+	info, err := os.Stat(target)
+	if err != nil || info.Mode().Perm() != 0600 {
+		t.Fatalf("snapshot missing or not private: %v %v", info, err)
+	}
+	if code, _, _ = run("view", "--project", "alpha", "--output", target); code != 1 {
+		t.Fatalf("existing snapshot overwritten: %d", code)
+	}
+	if code, _, _ = run("view", "--project", "missing"); code != 1 {
+		t.Fatalf("unregistered project accepted: %d", code)
+	}
+	if code, _, d = run("view", "--help"); code != 0 {
+		t.Fatalf("help: %d %s", code, d)
 	}
 }
