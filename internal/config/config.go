@@ -22,6 +22,8 @@ type Config struct {
 	LogLevel         string `json:"log_level"`
 	BackupDir        string `json:"backup_dir"`
 	ExportDir        string `json:"export_dir"`
+	// ViewerEnabled registers the optional memory_view tool, which writes HTML snapshots of stored memories.
+	ViewerEnabled bool `json:"viewer_enabled"`
 }
 
 func Load(path string, overrides ...func(*Config)) (Config, error) {
@@ -71,6 +73,13 @@ func Load(path string, overrides ...func(*Config)) (Config, error) {
 			}
 			*field.dest = n
 		}
+	}
+	if v, ok := os.LookupEnv("AGENT_MEMORY_VIEWER_ENABLED"); ok {
+		enabled, err := strconv.ParseBool(v)
+		if err != nil {
+			return c, fmt.Errorf("invalid AGENT_MEMORY_VIEWER_ENABLED")
+		}
+		c.ViewerEnabled = enabled
 	}
 	for _, override := range overrides {
 		override(&c)

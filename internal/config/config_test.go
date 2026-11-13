@@ -34,3 +34,27 @@ func TestInvalidConfiguration(t *testing.T) {
 		})
 	}
 }
+
+func TestViewerEnabledDefaultsOffAndParsesEnvironment(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	c, err := Load("")
+	if err != nil || c.ViewerEnabled {
+		t.Fatalf("viewer must default to off: %+v %v", c, err)
+	}
+	t.Setenv("AGENT_MEMORY_VIEWER_ENABLED", "true")
+	if c, err = Load(""); err != nil || !c.ViewerEnabled {
+		t.Fatalf("environment did not enable the viewer: %+v %v", c, err)
+	}
+	t.Setenv("AGENT_MEMORY_VIEWER_ENABLED", "maybe")
+	if _, err = Load(""); err == nil {
+		t.Fatal("unparsable value accepted")
+	}
+	p := filepath.Join(t.TempDir(), "config.json")
+	if err = os.WriteFile(p, []byte(`{"viewer_enabled":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("AGENT_MEMORY_VIEWER_ENABLED", "false")
+	if c, err = Load(p); err != nil || c.ViewerEnabled {
+		t.Fatalf("environment must override the file: %+v %v", c, err)
+	}
+}

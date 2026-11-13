@@ -65,3 +65,13 @@ Register one project by passing `register` instead of pagination: `{"register":{
 At most 10,000 projects can exist; registering or importing a new project beyond that returns `limit` and changes nothing. Identical re-registration succeeds; the same key with different metadata, or a `local_path` already held by another key, returns `conflict` and changes nothing. New paths are cleaned lexically: trailing separators, `.` and `..` do not create different identities. Existing records are compared using cleaned paths without rewriting their metadata. No symlink resolution, filesystem access, or case folding is performed. Imports enforce the same ownership rule within their transaction, including conflicts among imported projects; a conflict rolls back the whole import.
 
 Keys are never inferred from directory names, and agents must pass the repository path explicitly because the server working directory may differ. Recommended flow: page through the list looking for a matching cleaned `local_path`; if none matches, propose a key from the folder name, then register it.
+
+## memory_view (optional)
+
+Registered only when `viewer_enabled` is true (or `AGENT_MEMORY_VIEWER_ENABLED=true`); the default tool set stays the six tools above. Optional: `project_key`, `include_inactive`.
+
+Writes a read-only, self-contained HTML snapshot to `views/` next to the database (`0700` directory, `0600` file, never overwrites) and returns `{path, projects, memories, generated_at}` plus `truncated` when the record cap applied. It never opens the file, starts a process, or listens on a port; tell the user the path so they can open it. The result carries no memory content, and agents should not read the file back.
+
+Without `project_key` the snapshot covers every registered project plus global records. A `project_key` must be a registered project and limits the snapshot to that project; global records are not added. Default content is active, unexpired records; `include_inactive` adds superseded, archived, and expired records. Counts for every status are always shown.
+
+A snapshot holds at most 2,000 memories and 64 MiB. Content longer than the response budget is cut and marked in the page; `memory_get` returns the full text. Records over the cap are omitted and the page and result say so. A snapshot is a point-in-time plaintext copy of stored memory: it does not update, it is not deleted automatically, and it needs the same handling as an export. Stored text is untrusted and is shown as plain text only. `agent-memory view` produces the same snapshot from the command line without enabling the tool.

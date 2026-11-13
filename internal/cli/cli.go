@@ -148,7 +148,11 @@ func Run(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 		}
 		logger := slog.New(slog.NewJSONHandler(diagnostics, &slog.HandlerOptions{Level: level}))
 		logger.Info("starting stdio memory server")
-		err = mcpserver.New(svc, c.MaxResponseChars).Run(ctx, &mcp.StdioTransport{MaxLineLength: config.MaxInputBytes + 16384})
+		var options []mcpserver.Option
+		if c.ViewerEnabled {
+			options = append(options, mcpserver.WithViewer(c.DBPath))
+		}
+		err = mcpserver.New(svc, c.MaxResponseChars, options...).Run(ctx, &mcp.StdioTransport{MaxLineLength: config.MaxInputBytes + 16384})
 		if errors.Is(err, context.Canceled) {
 			err = nil
 		}
