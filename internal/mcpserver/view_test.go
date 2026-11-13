@@ -15,7 +15,7 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/storage/sqlite"
 )
 
-func viewSession(t *testing.T, enabled bool) (*mcp.ClientSession, string) {
+func viewSession(t *testing.T) (*mcp.ClientSession, string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -36,12 +36,8 @@ func viewSession(t *testing.T, enabled bool) (*mcp.ClientSession, string) {
 	if _, err = svc.Upsert(ctx, domain.UpsertInput{Scope: "project", ProjectKey: "alpha", Type: "fact", Title: "viewable", Content: "body", SourceAgent: "test"}); err != nil {
 		t.Fatal(err)
 	}
-	var options []Option
-	if enabled {
-		options = append(options, WithViewer(db))
-	}
 	a, b := mcp.NewInMemoryTransports()
-	ss, err := New(svc, 8000, options...).Connect(ctx, a, nil)
+	ss, err := New(svc, 8000, WithViewer(db)).Connect(ctx, a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,25 +50,12 @@ func viewSession(t *testing.T, enabled bool) (*mcp.ClientSession, string) {
 	return cs, db
 }
 
-func TestViewToolIsOffByDefault(t *testing.T) {
-	cs, _ := viewSession(t, false)
-	tools, err := cs.ListTools(context.Background(), nil)
-	if err != nil || len(tools.Tools) != 6 {
-		t.Fatalf("default tool set changed: %d %v", len(tools.Tools), err)
-	}
-	for _, tool := range tools.Tools {
-		if tool.Name == "memory_view" {
-			t.Fatal("memory_view registered without opt-in")
-		}
-	}
-}
-
 func TestViewToolWritesSnapshotAndReturnsPath(t *testing.T) {
-	cs, db := viewSession(t, true)
+	cs, db := viewSession(t)
 	ctx := context.Background()
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil || len(tools.Tools) != 7 {
-		t.Fatalf("expected seven tools with the viewer: %d %v", len(tools.Tools), err)
+		t.Fatalf("expected six core tools plus memory_view: %d %v", len(tools.Tools), err)
 	}
 	for _, tool := range tools.Tools {
 		if tool.Name == "memory_view" && (!strings.Contains(tool.Description, "untrusted stored data") || !strings.Contains(tool.Description, "unauthenticated claims")) {
@@ -105,7 +88,7 @@ func TestViewToolWritesSnapshotAndReturnsPath(t *testing.T) {
 }
 
 func TestViewToolRejectsBadProject(t *testing.T) {
-	cs, db := viewSession(t, true)
+	cs, db := viewSession(t)
 	for _, key := range []string{"missing", "../escape", "A B"} {
 		r, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "memory_view", Arguments: map[string]any{"project_key": key}})
 		if err != nil || !r.IsError {

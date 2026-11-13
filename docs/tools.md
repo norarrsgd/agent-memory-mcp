@@ -66,9 +66,9 @@ At most 10,000 projects can exist; registering or importing a new project beyond
 
 Keys are never inferred from directory names, and agents must pass the repository path explicitly because the server working directory may differ. Recommended flow: page through the list looking for a matching cleaned `local_path`; if none matches, propose a key from the folder name, then register it.
 
-## memory_view (optional)
+## memory_view
 
-Registered only when `viewer_enabled` is true (or `AGENT_MEMORY_VIEWER_ENABLED=true`); the default tool set stays the six tools above. Optional: `project_key`, `include_inactive`.
+Always registered by `serve`, in addition to the six tools above. Optional: `project_key`, `include_inactive`.
 
 Writes a read-only, self-contained HTML snapshot to `views/` next to the database (`0700` directory, `0600` file, never overwrites) and returns `{path, projects, memories, generated_at}` plus `truncated` when the record cap applied. It never opens the file, starts a process, or listens on a port; tell the user the path so they can open it. The result carries no memory content, and agents should not read the file back.
 

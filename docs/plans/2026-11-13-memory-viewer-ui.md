@@ -1,8 +1,8 @@
 # Memory viewer UI
 
-Status: decisions made (revision 2), implementation not started. Awaiting a go-ahead to begin phase 1.
+Status: implemented (revision 5: `memory_view` is always registered; the `viewer_enabled` opt-in described below was removed at the user's request). The standalone desktop app was dropped; the deliverable is the `view` command and the optional `memory_view` tool. Every mention of the desktop app, its toolkit options and phase 4 below is historical and was not built.
 
-Decisions: no hosted service; v1 read-only; `memory_view` writes a static HTML snapshot and returns its path (no browser, no command run); desktop app uses a system-webview wrapper (user selected it, which approves adding `webview_go` as a cgo dependency of the separate desktop binary only; the exact module and version are re-stated when it is added).
+Decisions: no hosted service; v1 read-only; `memory_view` writes a static HTML snapshot and returns its path (no browser, no command run); desktop app is a pure-Go launcher. Revision 3: the user then required macOS, Windows and Linux support, and chose a browser launcher over a webview or native toolkit, because every native-window option needs cgo or per-OS runtime libraries (WebView2 on Windows 10, WebKitGTK on Linux). No webview dependency was added.
 
 Revision 2 removes the loopback HTTP viewer from revision 1. Decision from the user: no hosted service; everything is an on-demand tool. Also decided: v1 is read-only.
 
@@ -64,6 +64,8 @@ Everything goes through `memory.Service`, never SQL, matching the existing "no b
 - Snapshot size is bounded: per-memory content truncated at the existing detail budget with a visible "truncated, use memory_get for the full text" marker; project-wide snapshots capped by record count with a stated limit.
 
 ## Path B: standalone desktop app
+
+Dropped (revision 4). The user required macOS, Windows and Linux support. Every native-window option needs cgo or per-OS runtime libraries (WebView2 on Windows 10, WebKitGTK on Linux), a pure-Go browser launcher was built and verified on macOS, and the user then chose to drop the desktop app entirely. The launcher and its `--open` flag were removed so the project still runs no subprocess. Users open the snapshot file themselves. The toolkit options below were considered and not used.
 
 - `cmd/agent-memory-desktop`, launched by the user, opens the DB read-only through the same config loader and private-path checks, renders the screens above natively, exits when closed. WAL lets it run alongside any MCP processes. No listener, nothing resident.
 - Toolkit options, which need your approval because they are new dependencies and require cgo:

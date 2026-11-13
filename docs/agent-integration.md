@@ -53,3 +53,7 @@ The hook is stateless and never opens the database: it reads the hook payload an
 7. The receiving agent requests `memory_handoff` with `operation: "latest"`, project, and optional task, then retrieves its ID and independently checks the current repository.
 
 Agents choose when to call tools. MCP configuration cannot guarantee recall, persistence, or appropriate relevance. Tool definitions and result metadata consume tokens; selective retrieval determines whether shared memory reduces overall context use. These instruction snippets implement an event-driven convention, not automatic lifecycle hooks or transcript ingestion.
+
+## Showing memories to the user
+
+When the user asks to see a project's memories, call `memory_view` with the project key and tell the user the returned path so they can open it. Do not read the file back into the conversation: it contains stored memory content. Without the tool, the user can run `agent-memory view --project KEY` themselves.

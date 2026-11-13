@@ -15,9 +15,9 @@ Each client creates an independent server process. The diagram represents common
 
 ## Boundaries
 
-`internal/mcpserver` registers the six tools using the official SDK and returns compact structured results with a text mirror for compatible clients. It does not implement business decisions. `internal/memory` owns input validation, evidence classification, secret checks, lifecycle rules, search query construction, and response budgets. Search and memory share a package to avoid a redundant service interface; their methods remain independently testable.
+`internal/mcpserver` registers the six core tools and `memory_view` using the official SDK and returns compact structured results with a text mirror for compatible clients. It does not implement business decisions. `internal/memory` owns input validation, evidence classification, secret checks, lifecycle rules, search query construction, and response budgets. Search and memory share a package to avoid a redundant service interface; their methods remain independently testable.
 
-`internal/storage/sqlite` owns SQL, transactional migrations, FTS triggers, snapshots, backups, and concurrency. It imports domain types, never MCP types. `internal/cli` adapts configuration and local commands. No HTTP listener, subprocess execution capability, repository ingestion, or background AI worker exists in the production code.
+`internal/storage/sqlite` owns SQL, transactional migrations, FTS triggers, snapshots, backups, and concurrency. It imports domain types, never MCP types. `internal/cli` adapts configuration and local commands. `internal/snapshot` builds the offline HTML page from service reads (`Summary`, `List`, `Get`) and writes it through the private-file publisher. No HTTP listener, subprocess execution capability, repository ingestion, or background AI worker exists in the production code.
 
 ## Storage
 

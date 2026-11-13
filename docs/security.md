@@ -20,11 +20,17 @@ Global memory is shared by every project, so one poisoned global `preference` or
 
 Explicit evidence labels do not prove a human approved a decision. Agents must verify references against authoritative sources.
 
+## Snapshots
+
+`agent-memory view` and the `memory_view` tool write an HTML copy of stored memories. It is plaintext, point-in-time and never deleted automatically, so it has the same exposure as a JSON export: it is created `0600` in a private `views/` directory, never overwrites a file, and must stay out of repositories and shared folders. The page is a new rendering surface for untrusted text. It displays stored content only through `textContent`, embeds its data with `<`, `>` and `&` escaped, makes no network requests, and carries a Content-Security-Policy that denies everything except its own script and style by SHA-256 hash. `source_agent` and `evidence` are labelled as unauthenticated claims on the page. Nothing opens a snapshot or runs a command; the user opens the file. A snapshot is not an authorization boundary: anyone who can read the file sees everything in it.
+
 ## Dependency advisories
 
 `make vuln` runs `govulncheck ./...`, which needs the tool on `PATH` and network access to the Go vulnerability database; it is not part of `make check`. On 2026-11-12 govulncheck v1.8.0 scanned all 19 modules and the Go 1.27.4 standard library against a database updated 2026-11-11 and reported no vulnerabilities. Re-run it before releases and after dependency changes; a clean result covers only advisories known on that date.
 
 ## Files and recovery
+
+Platform note: private-path validation compares Unix permission bits and syncs directories. That is verified on macOS only. The code cross-compiles for Windows and Linux, but Windows reports different permission bits and cannot sync a directory, so the database is expected to fail its private-path check there; Windows is unsupported until that is addressed.
 
 Application directories are private (`0700`); database, WAL/SHM, backups, and exports must be private (`0600`). Symlink components, URI database paths, and nonregular targets are rejected. Existing unsafe permissions cause a failure, not automatic broad permission changes. SQLite databases and JSON exports are unencrypted: use OS disk encryption and appropriate backup access controls.
 

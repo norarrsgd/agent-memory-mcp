@@ -13,7 +13,7 @@ This project is a local Model Context Protocol (MCP) server written in Go, using
 - Write memory: persist information for later retrieval by agents.
 - Handoff: persist context that another agent can retrieve to continue work.
 
-The six tools are `memory_search`, `memory_get`, `memory_upsert`, `memory_handoff`, `memory_archive`, and `memory_projects`; contracts are in `docs/tools.md`. Keep persistence agent-neutral. Test/build verification does not imply live Codex or Claude integration. Do not manually launch the server during this implementation's verification; the user requested automated tests and build only.
+The six tools are `memory_search`, `memory_get`, `memory_upsert`, `memory_handoff`, `memory_archive`, and `memory_projects`; contracts are in `docs/tools.md`. A seventh tool, `memory_view`, is always registered by `serve`; it and the `view` command write read-only HTML snapshots and never open them. Keep persistence agent-neutral. Test/build verification does not imply live Codex or Claude integration. Do not manually launch the server during this implementation's verification; the user requested automated tests and build only.
 
 ## Implementation guidance
 

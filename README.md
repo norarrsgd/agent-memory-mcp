@@ -49,6 +49,14 @@ A project search includes global memories by default. Explicit project-only sear
 
 See [tool contracts](docs/tools.md), [configuration](docs/configuration.md), [architecture](docs/architecture.md), [security](docs/security.md), [performance](docs/performance.md), and [verification report](docs/verification.md). Synthetic tool arguments are in `examples/memories.json`.
 
+## View memories
+
+```sh
+./bin/agent-memory view --project my-app
+```
+
+`view` writes a read-only, self-contained HTML page (projects, then memory counts by type, status and handoff status, then each memory) to `views/` next to the database and prints its path; open the file in any browser. Nothing listens on a port and nothing keeps running. Flags: `--project`, `--include-inactive`, `--output`. The page is a point-in-time plaintext copy of stored memory; treat it like an export. Agents can request the same snapshot through the always-registered `memory_view` tool, which returns only the file path. See [tool contracts](docs/tools.md) and [security](docs/security.md).
+
 ## Back up and restore
 
 ```sh
