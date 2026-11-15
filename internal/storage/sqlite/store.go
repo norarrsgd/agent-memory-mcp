@@ -71,6 +71,11 @@ func PrivatePath(path string, create bool) error {
 	if !filepath.IsAbs(path) || strings.ContainsRune(path, 0) || strings.HasPrefix(path, "file:") {
 		return domain.Err("validation", "path must be an absolute filesystem path")
 	}
+	// The OS resolves the original spelling, so a lexically cleaned inspection could skip a symlink
+	// (link/../x). Callers keep the original path, hence only canonical spellings are accepted.
+	if path != filepath.Clean(path) {
+		return domain.Err("validation", "path must be canonical: dot segments, repeated separators and trailing separators are unsupported")
+	}
 	parent := filepath.Dir(path)
 	// Refuse symlink components, including dangling links.
 	for p := filepath.Clean(path); ; p = filepath.Dir(p) {
