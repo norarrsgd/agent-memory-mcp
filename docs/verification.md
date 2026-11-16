@@ -43,13 +43,13 @@ Benchmarks executed with 10,000/50,000 initial records and 100 operations per wo
 
 ## Review findings and corrections
 
-One bounded read-only review was delegated to `gpt-6.1-sol` with medium reasoning. It returned two findings, with no file edits or commits and no worker repair round: JSON escaping could conceal credential assignments, and imports discarded normalization before persistence. The primary handler reproduced both with failing tests, corrected shared validation, reviewed the changes, and reran all final checks.
+A read-only review returned two findings: JSON escaping could conceal credential assignments, and imports discarded normalization before persistence. Both were reproduced with failing tests, fixed in shared validation, and all final checks were rerun.
 
 Additional testing exposed journal-mode startup contention, FTS health checks on query-only readers, latest-handoff schema requirements, flag precedence/explicit-zero handling, and missing structured import validation. These paths now have regression coverage. Test fixture directories were corrected to use private permissions so migration/corruption tests reach the intended database operations rather than failing only path validation.
 
 ## User-controlled integration and remaining limits
 
-Build/install location, project registration, and user-level MCP/instruction changes remain user actions. Review `agent-integration.md` and `examples/`; preserve existing configuration. Codex CLI 0.167.0 help was inspected. Claude Code is unavailable, though a user configuration file exists; it was left unchanged. Neither installed agent was connected to the server.
+Build/install location, project registration, and user-level MCP/instruction changes remain user actions. Review `agent-integration.md` and `examples/`; preserve existing configuration. The documented Codex and Claude Code commands and configuration were not run against a live client, and neither client was connected to the server during verification.
 
 Tests/build pass with module downloads disabled and the implementation has no outbound runtime feature. No dedicated firewall isolation test or idle-server RSS measurement was performed. Protocol compatibility does not guarantee agent recall or relevance.
 

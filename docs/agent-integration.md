@@ -4,7 +4,7 @@ Build the executable first and register stable project keys. Both clients launch
 
 ## Verification boundary
 
-Installed Codex CLI 0.167.0 was inspected using `codex --version`, `codex mcp --help`, and `codex mcp add --help`. These confirm the documented command syntax. Claude Code is not installed; its examples follow the official documentation at https://code.claude.com/docs/en/mcp and are not locally verified.
+The Codex commands follow `codex mcp --help` and `codex mcp add --help`. The Claude Code examples follow the official documentation at https://code.claude.com/docs/en/mcp. Neither has been verified against a live client.
 
 Automated official-SDK client tests cover initialization, tool discovery, invocation, structured errors, stdio, and cross-process visibility. Neither client has been launched against this server, and no global configuration has been modified. Per the development constraint, no manual server launch is part of verification.
 
