@@ -18,7 +18,7 @@ Dependencies: official MCP Go SDK v1.8.0 and pure-Go modernc SQLite v1.62.0, plu
 
 ## Verification
 
-Run `go test ./...`, `go test -race ./...`, `go vet ./...`, and `CGO_ENABLED=0 go build -trimpath -o bin/agent-memory ./cmd/agent-memory`. `make check` provides the same workflow. Under a restricted environment, set `GOCACHE` to a writable cache directory.
+Run `go test ./...`, `go test -race ./...`, `go vet ./...`, and `CGO_ENABLED=0 go build -trimpath -o bin/agent-memory ./cmd/agent-memory`. `make check` provides the same workflow; `make fmt` runs `gofmt -w cmd internal`, `make bench` runs the benchmarks, and `make vuln` runs `govulncheck` (needs network, not part of `check`). Under a restricted environment, set `GOCACHE` to a writable cache directory.
 
 Tests use real private temporary SQLite databases. Process tests automatically create temporary MCP test processes and kill an interrupted writer; never use a personal database in tests. Benchmarks are in the memory package and use deterministic 10,000/50,000-record synthetic data.
 

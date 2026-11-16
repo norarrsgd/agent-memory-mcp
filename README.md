@@ -32,7 +32,7 @@ Default database: `~/.local/share/agent-memory/memory.db`. Its application direc
 
 ## Connect agents
 
-See [agent integration](docs/agent-integration.md) for user-scoped examples and minimal instructions. Both clients must use the same absolute executable and database paths. Existing global configuration and instruction files are never modified by this project.
+See [agent integration](docs/agent-integration.md) for user-scoped examples and minimal instructions. Both clients must use the same absolute executable and database paths. Existing global configuration and instruction files are never modified by this project. Claude Code users can also opt in to the stateless `agent-memory hook` command, which reminds the agent to search and write memory; it never opens the database.
 
 `agent-memory serve` is the stdio entry point used by MCP clients. It is not a daemon or an HTTP service; do not run it in a terminal expecting interactive output. Diagnostics use stderr exclusively.
 
@@ -44,6 +44,7 @@ See [agent integration](docs/agent-integration.md) for user-scoped examples and 
 - `memory_handoff`: structured create/update and deterministic latest-active lookup.
 - `memory_archive`: version-checked archival without deletion.
 - `memory_projects`: bounded discovery and active-memory counts.
+- `memory_view`: writes a read-only HTML snapshot and returns its path (see [View memories](#view-memories)).
 
 A project search includes global memories by default. Explicit project-only searches are available. No project search includes another project's records. Global-only searches do not include project memories. Search does not return full bodies.
 

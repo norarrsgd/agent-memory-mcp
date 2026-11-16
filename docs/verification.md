@@ -8,13 +8,13 @@ Verified on 2026-11-12 with Go 1.27.4, darwin/arm64, Apple M4 Pro. This report d
 - `internal/config/`, `internal/domain/`: configuration, record/tool inputs, safe errors, and budget accounting.
 - `internal/storage/sqlite/`, including `migrations/001_initial.sql`: embedded atomic migration, WAL connections, transactional writes, FTS5, health checks, snapshots, and backup.
 - `internal/memory/`: independent validation, secret checks, scoped search, Unicode retrieval, lifecycle, handoffs, import validation, integration tests, and benchmarks.
-- `internal/mcpserver/`, `internal/cli/`: six official-SDK tools, stdio framing limits, operational commands, and automated process tests.
+- `internal/mcpserver/`, `internal/cli/`: six official-SDK tools plus `memory_view`, stdio framing limits, operational commands, and automated process tests.
 - `go.mod`, `go.sum`, `Makefile`, `.gitignore`: pinned build dependencies and local workflows.
 - `README.md`, `CODEBASE.md`, updated `AGENTS.md`, and `docs/`: architecture, contracts, security, configuration, recovery, integration, measurements, and this report.
 - `examples/`: proposed Codex/Claude configuration, minimal agent instructions, and synthetic memory/handoff tool inputs.
 - `bin/agent-memory`: built macOS ARM64 executable, 17,910,306 bytes, CGO disabled; ignored as a generated artifact.
 
-There was no existing Go implementation or Git repository. No Git repository, commits, personal database, or user-level agent settings were created or modified.
+There was no existing Go implementation at the initial verification. No personal database or user-level agent settings were created or modified.
 
 ## Dependencies and architecture
 
@@ -33,7 +33,7 @@ go vet ./...
 CGO_ENABLED=0 go build -trimpath -o bin/agent-memory ./cmd/agent-memory
 ```
 
-All five packages with tests passed; the entry-point and domain packages have no standalone test files. Their behavior is exercised through CLI, service, and protocol tests. There are 34 top-level test functions, including subprocess helpers. `gofmt -l cmd internal` produced no output; whitespace and temporary-diagnostic searches found no issues. Git diff checks are unavailable because this directory is not a Git repository.
+All seven packages with tests passed (`claudehook`, `cli`, `config`, `mcpserver`, `memory`, `snapshot`, `storage/sqlite`); the entry-point and domain packages have no standalone test files. Their behavior is exercised through CLI, service, and protocol tests. There are 78 top-level test functions, including subprocess helpers (counted 2026-11-17, when `go test -count=1 ./...` was rerun and passed; the other checks above were last run on 2026-11-12). `gofmt -l cmd internal` produced no output; whitespace and temporary-diagnostic searches found no issues.
 
 Automated coverage includes initialization/persistence, migration checksum/newer-schema rejection, atomic migration rollback, corrupted-database preservation, CAS conflicts, idempotency, archival/supersession/expiration, FTS updates/ranking/filtering, literal malformed queries, Unicode/budgets/continuation, handoffs, secret rejection including JSON snippets, canonical import validation, repeated/conflicting imports, backups/restoration during independent writes, busy handling, concurrent initialization/read/write, interrupted-transaction recovery, and deliberately inconsistent FTS detection.
 
@@ -55,4 +55,4 @@ Tests/build pass with module downloads disabled and the implementation has no ou
 
 Secret detection is heuristic, SQLite/export data is unencrypted, evidence labels are unauthenticated claims, and projects share an OS-account trust boundary. JSON import is capped at 100 MiB and validates in memory; use trusted SQLite backup/restore for larger complete stores. No automatic secret cleanup, schema repair, force import, or physical deletion exists.
 
-Semantic search, automatic ingestion/consolidation/hooks, GitHub synchronization, HTTP, dashboards, cross-device synchronization, and automatic Git/cloud workflows are intentionally deferred.
+Semantic search, automatic ingestion/consolidation, server-side lifecycle hooks (only the opt-in, stateless `agent-memory hook` for Claude Code exists; see `agent-integration.md`), GitHub synchronization, HTTP, dashboards, cross-device synchronization, and automatic Git/cloud workflows are intentionally deferred.
