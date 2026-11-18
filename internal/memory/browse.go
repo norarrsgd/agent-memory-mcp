@@ -47,8 +47,8 @@ func (s *Service) List(ctx context.Context, in domain.ListInput) (domain.ListRes
 	default:
 		return out, domain.Err("validation", "status must be active, superseded, archived or expired")
 	}
-	if in.Type != "" && !memoryType(in.Type) {
-		return out, domain.Err("validation", "type must be fact, decision, lesson, task, handoff or preference")
+	if in.Type != "" && !domain.ValidMemoryType(in.Type) {
+		return out, domain.Err("validation", "type must be one of: "+domain.MemoryTypeList())
 	}
 	switch in.HandoffStatus {
 	case "":

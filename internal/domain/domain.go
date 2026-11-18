@@ -3,6 +3,8 @@ package domain
 import (
 	"encoding/json"
 	"errors"
+	"slices"
+	"strings"
 )
 
 type Error struct {
@@ -65,7 +67,7 @@ type UpsertInput struct {
 	ID                string   `json:"id,omitempty"`
 	Scope             string   `json:"scope"`
 	ProjectKey        string   `json:"project_key,omitempty"`
-	Type              string   `json:"type"`
+	Type              string   `json:"type" jsonschema:"one of fact (verified statement about the system), decision (choice and rationale), lesson (reusable takeaway or failed approach), task (open work item), preference (durable working preference), finding (investigation result, possibly unconfirmed), discovery (newly learned reusable knowledge). handoff is rejected here; use memory_handoff"`
 	Title             string   `json:"title"`
 	Content           string   `json:"content"`
 	Tags              []string `json:"tags,omitempty"`
@@ -93,7 +95,7 @@ type SearchInput struct {
 	Query            string   `json:"query"`
 	Scope            string   `json:"scope,omitempty"`
 	ProjectKey       string   `json:"project_key,omitempty"`
-	MemoryTypes      []string `json:"memory_types,omitempty"`
+	MemoryTypes      []string `json:"memory_types,omitempty" jsonschema:"OR filter over fact, decision, lesson, task, handoff, preference, finding, discovery; at most 8"`
 	Tags             []string `json:"tags,omitempty"`
 	Limit            int      `json:"limit,omitempty"`
 	MaxResponseChars int      `json:"max_response_chars,omitempty"`
@@ -204,4 +206,16 @@ func CheckInputSize(v any) error {
 		return Err("validation", "input exceeds 256 KiB")
 	}
 	return nil
+}
+
+// MemoryTypes is the closed set of accepted memory types. Handoffs are accepted for reads and filters but are
+// written only through memory_handoff. The memories.type CHECK constraint in the SQLite migrations must match.
+var MemoryTypes = []string{"fact", "decision", "lesson", "task", "handoff", "preference", "finding", "discovery"}
+
+// ValidMemoryType reports whether v is an accepted memory type.
+func ValidMemoryType(v string) bool { return slices.Contains(MemoryTypes, v) }
+
+// MemoryTypeList renders the accepted types for validation errors, e.g. "fact, decision, or discovery".
+func MemoryTypeList() string {
+	return strings.Join(MemoryTypes[:len(MemoryTypes)-1], ", ") + ", or " + MemoryTypes[len(MemoryTypes)-1]
 }

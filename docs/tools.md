@@ -4,13 +4,28 @@ Tool results are compact JSON in both MCP structured content and a text mirror. 
 
 IDs are lowercase UUIDv4. Project/task keys use lowercase letters, digits, `.`, `_`, or `-`, starting with a letter or digit, up to 80 characters. Agent labels are descriptive strings up to 80 characters. All tool input is bounded to 256 KiB.
 
+## Memory types
+
+Every record has exactly one type from this closed set. Any other value is rejected with a validation error that lists the accepted types; the tool schemas for `memory_upsert` and `memory_search` list them too.
+
+- `fact`: a statement about the system, repository, or environment.
+- `decision`: a choice and its rationale. Only this type may carry `approved_decision` evidence.
+- `finding`: the result of an investigation, such as a root cause, measurement, or audit observation. Pair it with `hypothesis` or `verified` evidence to show how settled it is.
+- `discovery`: newly learned reusable knowledge, such as a non-obvious behavior, an undocumented constraint, or a useful technique.
+- `lesson`: a reusable takeaway, including a failed approach and why it failed.
+- `task`: an open work item.
+- `preference`: a durable working preference.
+- `handoff`: unfinished-work context for another agent. It is written only through `memory_handoff`; `memory_upsert` rejects it, while searches and listings may filter on it.
+
+The type is fixed when a record is created. `finding` and `discovery` were added in schema version 2; see the migration notes in `architecture.md`.
+
 ## memory_search
 
 Required: `query`. Optional: `scope`, `project_key`, `memory_types`, `tags`, `limit`, `max_response_chars`.
 
 Scopes: `global`, `project`, `project_global`. Omitting scope selects `project_global` if a project key is provided, otherwise `global`. Global scope rejects a project key; other scopes require a registered project. No all-project search exists.
 
-Types: `fact`, `decision`, `lesson`, `task`, `handoff`, `preference`. Types are OR filters; tags are AND filters. Tags are trimmed/lowercased/sorted/deduplicated. Queries use 1–32 literal Unicode terms joined with AND, up to 512 characters. Operators, quotes, and punctuation are not interpreted as raw FTS syntax. Empty or punctuation-only queries return validation errors.
+Types: any of the memory types above, at most 8 entries. Types are OR filters; tags are AND filters. Tags are trimmed/lowercased/sorted/deduplicated. Queries use 1–32 literal Unicode terms joined with AND, up to 512 characters. Operators, quotes, and punctuation are not interpreted as raw FTS syntax. Empty or punctuation-only queries return validation errors.
 
 Results contain only `id`, `title`, `type`, optional `project`, `excerpt`, `score`, and `updated_at`. Scores are negated SQLite BM25 values; higher ranks first and scores are not probabilities. Ties use newest update then ID. Snippets contain at most 240 characters. Normal results exclude archived, superseded, and expired records. Budget pressure removes results and sets `budget_limited`; increase the budget or narrow the query when necessary.
 
@@ -26,7 +41,7 @@ Ordinary content uses `representation: "text"` when paginated. A full handoff ha
 
 ## memory_upsert
 
-Required: `scope`, `type`, `title`, `content`, `source_agent`. Project scope also requires `project_key`. Optional: `id`, `tags`, `source_reference`, `expected_version`, `idempotency_key`, `evidence`, `last_verified_at`, `expires_at`, `supersedes_id`, `supersedes_version`.
+Required: `scope`, `type`, `title`, `content`, `source_agent`. `type` is one of the memory types above except `handoff`. Project scope also requires `project_key`. Optional: `id`, `tags`, `source_reference`, `expected_version`, `idempotency_key`, `evidence`, `last_verified_at`, `expires_at`, `supersedes_id`, `supersedes_version`.
 
 Creation omits ID/version and returns `{id,version}` with version 1. Updates require ID and expected version; they replace editable fields rather than patching omitted optional fields. Scope, project, and type cannot change. Inactive records cannot be edited. Retrieve and preserve metadata you intend to retain. Unchanged content/metadata preserves the version and update timestamp.
 

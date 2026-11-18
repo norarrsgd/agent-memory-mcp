@@ -3,7 +3,7 @@
 const data = JSON.parse(document.getElementById("data").textContent);
 const view = document.getElementById("view");
 const crumbs = document.getElementById("crumbs");
-const TYPES = ["fact", "decision", "lesson", "task", "handoff", "preference"];
+const TYPES = ["fact", "decision", "lesson", "task", "handoff", "preference", "finding", "discovery"];
 const STATUSES = ["active", "superseded", "archived", "expired"];
 const HANDOFF = ["in_progress", "blocked", "completed"];
 

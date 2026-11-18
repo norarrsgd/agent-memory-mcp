@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -126,13 +127,6 @@ func uuid() string {
 	b[8] = (b[8] & 63) | 128
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
-func memoryType(v string) bool {
-	switch v {
-	case "fact", "decision", "lesson", "task", "handoff", "preference":
-		return true
-	}
-	return false
-}
 func timestamp(value string) (string, error) {
 	if value == "" {
 		return "", nil
@@ -201,8 +195,8 @@ func (s *Service) validate(ctx context.Context, in *domain.UpsertInput, allowHan
 	default:
 		return domain.Err("validation", "scope must be global or project")
 	}
-	if !memoryType(in.Type) || (!allowHandoff && in.Type == "handoff") {
-		return domain.Err("validation", "invalid memory type; handoffs use memory_handoff")
+	if !domain.ValidMemoryType(in.Type) || (!allowHandoff && in.Type == "handoff") {
+		return domain.Err("validation", "invalid memory type; accepted types: "+domain.MemoryTypeList()+"; handoffs use memory_handoff")
 	}
 	for _, f := range []struct {
 		name, value string
@@ -412,12 +406,12 @@ func (s *Service) Search(ctx context.Context, in domain.SearchInput) (domain.Sea
 	if in.Limit < 1 || in.Limit > 20 {
 		return out, domain.Err("validation", "limit must be 1..20")
 	}
-	if len(in.MemoryTypes) > 6 {
-		return out, domain.Err("validation", "too many memory types")
+	if len(in.MemoryTypes) > len(domain.MemoryTypes) {
+		return out, domain.Err("validation", "too many memory types; at most "+strconv.Itoa(len(domain.MemoryTypes)))
 	}
 	for _, t := range in.MemoryTypes {
-		if !memoryType(t) {
-			return out, domain.Err("validation", "invalid memory type")
+		if !domain.ValidMemoryType(t) {
+			return out, domain.Err("validation", "invalid memory type; accepted types: "+domain.MemoryTypeList())
 		}
 	}
 	in.Tags, err = tags(in.Tags)

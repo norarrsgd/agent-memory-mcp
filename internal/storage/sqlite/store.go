@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -24,7 +25,7 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // DefaultMaxDBMB is the database size ceiling used when no limit is configured.
 const DefaultMaxDBMB = 1024
@@ -226,18 +227,31 @@ func (s *Store) transaction(ctx context.Context, fn func(*sql.Conn) error) error
 		return mapError(err)
 	}
 	defer c.Close()
-	if _, err = c.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+	return runTransaction(ctx, c, fn)
+}
+func runTransaction(ctx context.Context, c *sql.Conn, fn func(*sql.Conn) error) error {
+	if _, err := c.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
 		return mapError(err)
 	}
 	defer func() { _, _ = c.ExecContext(context.Background(), "ROLLBACK") }()
-	if err = fn(c); err != nil {
+	if err := fn(c); err != nil {
 		return mapError(err)
 	}
-	_, err = c.ExecContext(ctx, "COMMIT")
+	_, err := c.ExecContext(ctx, "COMMIT")
 	return mapError(err)
 }
 func (s *Store) migrate(ctx context.Context) error {
-	return s.transaction(ctx, func(c *sql.Conn) error {
+	c, err := s.write.Conn(ctx)
+	if err != nil {
+		return mapError(err)
+	}
+	defer c.Close()
+	// foreign_keys cannot change inside a transaction. Table-rebuild migrations need it off; it is verified before commit and restored after.
+	if _, err = c.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return mapError(err)
+	}
+	defer func() { _, _ = c.ExecContext(context.Background(), "PRAGMA foreign_keys=ON") }()
+	return runTransaction(ctx, c, func(c *sql.Conn) error {
 		if _, err := c.ExecContext(ctx, "CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, checksum TEXT NOT NULL)"); err != nil {
 			return err
 		}
@@ -249,7 +263,11 @@ func (s *Store) migrate(ctx context.Context) error {
 			return domain.Err("schema", "database schema is newer than this executable")
 		}
 		for i := 1; i <= SchemaVersion; i++ {
-			b, err := migrations.ReadFile(fmt.Sprintf("migrations/%03d_initial.sql", i))
+			names, err := fs.Glob(migrations, fmt.Sprintf("migrations/%03d_*.sql", i))
+			if err != nil || len(names) != 1 {
+				return domain.Err("schema", "migration file missing or ambiguous")
+			}
+			b, err := migrations.ReadFile(names[0])
 			if err != nil {
 				return err
 			}
@@ -267,6 +285,9 @@ func (s *Store) migrate(ctx context.Context) error {
 			}
 			if _, err = c.ExecContext(ctx, string(b)); err != nil {
 				return domain.Err("schema", "schema migration failed; database preserved")
+			}
+			if err = foreignKeyCheck(ctx, c); err != nil {
+				return err
 			}
 			if _, err = c.ExecContext(ctx, "INSERT INTO schema_migrations VALUES(?,?)", i, checksum); err != nil {
 				return err
@@ -655,4 +676,17 @@ func (s *Store) Status(ctx context.Context) (map[string]any, error) {
 		return nil, mapError(err)
 	}
 	return map[string]any{"schema_version": SchemaVersion, "projects": projects, "memories": memories, "journal_mode": mode}, nil
+}
+
+// foreignKeyCheck fails the migration when a rebuild left orphaned child rows.
+func foreignKeyCheck(ctx context.Context, c *sql.Conn) error {
+	rows, err := c.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	if rows.Next() {
+		return domain.Err("schema", "schema migration left foreign key violations; database preserved")
+	}
+	return rows.Err()
 }

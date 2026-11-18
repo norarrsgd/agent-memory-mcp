@@ -6,7 +6,7 @@ Verified on 2026-11-12 with Go 1.27.4, darwin/arm64, Apple M4 Pro. This report d
 
 - `cmd/agent-memory/`: executable entry point and signal handling.
 - `internal/config/`, `internal/domain/`: configuration, record/tool inputs, safe errors, and budget accounting.
-- `internal/storage/sqlite/`, including `migrations/001_initial.sql`: embedded atomic migration, WAL connections, transactional writes, FTS5, health checks, snapshots, and backup.
+- `internal/storage/sqlite/`, including `migrations/*.sql`: embedded atomic migration, WAL connections, transactional writes, FTS5, health checks, snapshots, and backup.
 - `internal/memory/`: independent validation, secret checks, scoped search, Unicode retrieval, lifecycle, handoffs, import validation, integration tests, and benchmarks.
 - `internal/mcpserver/`, `internal/cli/`: six official-SDK tools plus `memory_view`, stdio framing limits, operational commands, and automated process tests.
 - `go.mod`, `go.sum`, `Makefile`, `.gitignore`: pinned build dependencies and local workflows.
@@ -35,7 +35,7 @@ CGO_ENABLED=0 go build -trimpath -o bin/agent-memory ./cmd/agent-memory
 
 All seven packages with tests passed (`claudehook`, `cli`, `config`, `mcpserver`, `memory`, `snapshot`, `storage/sqlite`); the entry-point and domain packages have no standalone test files. Their behavior is exercised through CLI, service, and protocol tests. There are 78 top-level test functions, including subprocess helpers (counted 2026-11-17, when `go test -count=1 ./...` was rerun and passed; the other checks above were last run on 2026-11-12). `gofmt -l cmd internal` produced no output; whitespace and temporary-diagnostic searches found no issues.
 
-Automated coverage includes initialization/persistence, migration checksum/newer-schema rejection, atomic migration rollback, corrupted-database preservation, CAS conflicts, idempotency, archival/supersession/expiration, FTS updates/ranking/filtering, literal malformed queries, Unicode/budgets/continuation, handoffs, secret rejection including JSON snippets, canonical import validation, repeated/conflicting imports, backups/restoration during independent writes, busy handling, concurrent initialization/read/write, interrupted-transaction recovery, and deliberately inconsistent FTS detection.
+Automated coverage includes initialization/persistence, migration checksum/newer-schema rejection, atomic migration rollback, upgrade of a schema 1 database to the finding/discovery types with data, FTS, and foreign keys intact, corrupted-database preservation, CAS conflicts, idempotency, archival/supersession/expiration, FTS updates/ranking/filtering, literal malformed queries, Unicode/budgets/continuation, handoffs, secret rejection including JSON snippets, canonical import validation, repeated/conflicting imports, backups/restoration during independent writes, busy handling, concurrent initialization/read/write, interrupted-transaction recovery, and deliberately inconsistent FTS detection.
 
 Official-SDK MCP tests verify discovery, invocation, validation/errors, structured results, documented example payloads, and minimal latest-handoff input. Automated stdio process tests prove a write from one process is readable by another, competing same-version updates have exactly one winner, and committed state remains readable after process termination and restart. All test servers use temporary databases and terminate with the tests. No manual server launch was performed.
 

@@ -175,3 +175,44 @@ func TestDocumentedExamples(t *testing.T) {
 		}
 	}
 }
+
+// TestToolSchemasDocumentMemoryTypes makes sure agents can read every accepted type from the tool schemas.
+func TestToolSchemasDocumentMemoryTypes(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := sqlite.Open(filepath.Join(dir, "private", "db"), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	a, b := mcp.NewInMemoryTransports()
+	ss, err := New(memory.New(store, config.Config{SearchLimit: 5, MaxResponseChars: 8000}), 8000).Connect(ctx, a, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ss.Close()
+	cs, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx, b, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	tools, err := cs.ListTools(ctx, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range tools.Tools {
+		if tool.Name != "memory_upsert" && tool.Name != "memory_search" {
+			continue
+		}
+		schema, _ := json.Marshal(tool.InputSchema)
+		for _, kind := range domain.MemoryTypes {
+			if !bytes.Contains(schema, []byte(kind)) {
+				t.Fatalf("%s schema omits type %q: %s", tool.Name, kind, schema)
+			}
+		}
+	}
+}

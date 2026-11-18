@@ -25,7 +25,7 @@ The first embedded migration creates project records, memory records with indexe
 
 Foreign keys and constraints enforce basic scope/type/lifecycle consistency. Services validate richer invariants, including immutable project/type, source evidence, handoff relationships, and same-scope supersession. Timestamps use fixed-width UTC RFC3339 nanoseconds so lexical time order is stable. UUIDv4 IDs are independent of SQLite row IDs.
 
-Migration checksums are verified at startup. `BEGIN IMMEDIATE` serializes migrations across processes; versions and DDL commit together. A newer schema or checksum mismatch fails closed. Schema migration failure preserves the original database.
+Migration 002 adds the `finding` and `discovery` memory types. SQLite cannot alter a CHECK constraint, so it rebuilds `memories` with rowids preserved (keeping the external-content FTS index valid), recreates the indexes and triggers, and runs with foreign keys off for that transaction only, then verifies `foreign_key_check` before commit and restores `foreign_keys=ON`. Once a database is upgraded, executables that only know schema 1 refuse to open it as a newer schema; back up first with `agent-memory backup` if a rollback may be needed. Migration checksums are verified at startup. `BEGIN IMMEDIATE` serializes migrations across processes; versions and DDL commit together. A newer schema or checksum mismatch fails closed. Schema migration failure preserves the original database.
 
 ## Concurrency and durability
 

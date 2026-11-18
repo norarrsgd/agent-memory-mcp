@@ -2,7 +2,7 @@
 
 `agent-memory` is a local Go MCP server for persistent knowledge shared by Codex, Claude Code, and other MCP clients. Each client launches its own stdio process against one SQLite database. No cloud service, LLM, embeddings, HTTP listener, Docker, or Python is required at runtime.
 
-Shared memory stores facts, decisions, lessons, tasks, handoffs, and preferences independently of an agent's native conversation history. Search returns compact references; agents retrieve complete records only when useful. Memory is a contextual index: current code, approved documentation, and authoritative task records take precedence over historical notes.
+Shared memory stores facts, decisions, findings, discoveries, lessons, tasks, handoffs, and preferences independently of an agent's native conversation history. Search returns compact references; agents retrieve complete records only when useful. Memory is a contextual index: current code, approved documentation, and authoritative task records take precedence over historical notes.
 
 ## Build and test
 
