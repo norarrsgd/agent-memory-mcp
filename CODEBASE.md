@@ -9,7 +9,7 @@ This is a local stdio MCP server written in Go. SQLite is authoritative storage;
 - `internal/domain` holds protocol-independent records, inputs, errors, and budget accounting.
 - `internal/storage/sqlite` owns private paths, schema migrations, WAL connections, transactions, FTS triggers, backups, and snapshot persistence.
 - `internal/memory` owns memory/search validation, secret checks, lifecycle, handoffs, response budgets, and import validation.
-- `internal/mcpserver` adapts six typed SDK tools to service methods, plus the `memory_view` tool, which `serve` registers through `WithViewer`; no business logic belongs in transport handlers.
+- `internal/mcpserver` adapts six typed SDK tools to service methods. `serve` adds `memory_view` through `WithViewer`, which returns snapshot metadata and a local browser URL when the response budget permits.
 - `internal/snapshot` renders a read-only, self-contained HTML copy of stored memories (embedded `web/` page, CSP by hash, textContent-only rendering, 2000-record and 64 MiB caps) through the memory service and publishes it with `sqlite.WritePrivateFile`.
 - `internal/cli` owns commands and operational file input/output, including `view`.
 - `internal/claudehook` implements the opt-in stateless `agent-memory hook` command for Claude Code (`SessionStart`, `UserPromptSubmit`, `Stop`). It reads stdin and the session transcript only, never the database, and fails open; `cli` dispatches it before config load and store open.

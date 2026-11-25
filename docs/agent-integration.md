@@ -56,4 +56,4 @@ Agents choose when to call tools. MCP configuration cannot guarantee recall, per
 
 ## Showing memories to the user
 
-When the user asks to see a project's memories, call `memory_view` with the project key and tell the user the returned path so they can open it. Do not read the file back into the conversation: it contains stored memory content. Without the tool, the user can run `agent-memory view --project KEY` themselves.
+When the user asks to see a project's memories, call `memory_view` with the project key. Show `file_url` verbatim as copyable text so the user can paste it into a browser on the machine running the MCP server. Some clients style local links without making them clickable. If the result omits `file_url`, show the absolute `path` so the user can open it from their browser or file manager. Keep stored memory content out of the conversation. Without the tool, the user can run `agent-memory view --project KEY` themselves.

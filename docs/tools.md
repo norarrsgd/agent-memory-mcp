@@ -85,7 +85,7 @@ Keys are never inferred from directory names, and agents must pass the repositor
 
 Always registered by `serve`, in addition to the six tools above. Optional: `project_key`, `include_inactive`.
 
-Writes a read-only, self-contained HTML snapshot to `views/` next to the database (`0700` directory, `0600` file, never overwrites) and returns `{path, projects, memories, generated_at}` plus `truncated` when the record cap applied. It never opens the file, starts a process, or listens on a port; tell the user the path so they can open it. The result carries no memory content, and agents should not read the file back.
+Writes a read-only, self-contained HTML snapshot to `views/` next to the database (`0700` directory, `0600` file, never overwrites). Returns `path`, `projects`, `memories`, and `generated_at`, plus `truncated` when the record cap applies. The result also includes `file_url`, an encoded local file URL for a browser on the machine running the MCP server. If the response budget cannot fit the URL, the tool still returns `path` when it fits. Show `file_url` verbatim as copyable text, or show `path` when the URL is absent. The user opens the file. Keep its contents out of the conversation.
 
 Without `project_key` the snapshot covers every registered project plus global records. A `project_key` must be a registered project and limits the snapshot to that project; global records are not added. Default content is active, unexpired records; `include_inactive` adds superseded, archived, and expired records. Counts for every status are always shown.
 

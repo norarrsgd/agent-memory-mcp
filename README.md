@@ -44,7 +44,7 @@ See [agent integration](docs/agent-integration.md) for user-scoped examples and 
 - `memory_handoff`: structured create/update and deterministic latest-active lookup.
 - `memory_archive`: version-checked archival without deletion.
 - `memory_projects`: bounded discovery and active-memory counts.
-- `memory_view`: writes a read-only HTML snapshot and returns its path (see [View memories](#view-memories)).
+- `memory_view`: writes a read-only HTML snapshot and returns its path and browser address (see [View memories](#view-memories)).
 
 A project search includes global memories by default. Explicit project-only searches are available. No project search includes another project's records. Global-only searches do not include project memories. Search does not return full bodies.
 
@@ -56,7 +56,9 @@ See [tool contracts](docs/tools.md), [configuration](docs/configuration.md), [ar
 ./bin/agent-memory view --project my-app
 ```
 
-`view` writes a read-only, self-contained HTML page (projects, then memory counts by type, status and handoff status, then each memory) to `views/` next to the database and prints its path; open the file in any browser. Nothing listens on a port and nothing keeps running. Flags: `--project`, `--include-inactive`, `--output`. The page is a point-in-time plaintext copy of stored memory; treat it like an export. Agents can request the same snapshot through the always-registered `memory_view` tool, which returns only the file path. See [tool contracts](docs/tools.md) and [security](docs/security.md).
+`view` writes a read-only, self-contained HTML page (projects, then memory counts by type, status and handoff status, then each memory) to `views/` next to the database and prints its path. Open the file in any browser. Flags are `--project`, `--include-inactive`, and `--output`. The page is a point-in-time plaintext copy of stored memory. Treat it like an export.
+
+Agents can request the same snapshot through `memory_view`. Paste the returned `file_url` into a browser on the machine running the MCP server. If the result contains only `path`, use your browser's Open File command. The snapshot works offline. See [tool contracts](docs/tools.md) and [security](docs/security.md).
 
 ## Back up and restore
 

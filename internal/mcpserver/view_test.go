@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	"github.com/norarrsgd/agent-memory-mcp/internal/storage/sqlite"
 )
 
-func viewSession(t *testing.T) (*mcp.ClientSession, string) {
+func viewSession(t *testing.T, parent string, maxResponseChars int) (*mcp.ClientSession, string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -23,7 +24,7 @@ func viewSession(t *testing.T) (*mcp.ClientSession, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	db := filepath.Join(dir, "private", "memory.db")
+	db := filepath.Join(dir, parent, "memory.db")
 	store, err := sqlite.Open(db, 100)
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +38,7 @@ func viewSession(t *testing.T) (*mcp.ClientSession, string) {
 		t.Fatal(err)
 	}
 	a, b := mcp.NewInMemoryTransports()
-	ss, err := New(svc, 8000, WithViewer(db)).Connect(ctx, a, nil)
+	ss, err := New(svc, maxResponseChars, WithViewer(db)).Connect(ctx, a, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,8 +51,8 @@ func viewSession(t *testing.T) (*mcp.ClientSession, string) {
 	return cs, db
 }
 
-func TestViewToolWritesSnapshotAndReturnsPath(t *testing.T) {
-	cs, db := viewSession(t)
+func TestViewToolReturnsBrowserAddress(t *testing.T) {
+	cs, db := viewSession(t, "private # % ?", 1024)
 	ctx := context.Background()
 	tools, err := cs.ListTools(ctx, nil)
 	if err != nil || len(tools.Tools) != 7 {
@@ -67,16 +68,30 @@ func TestViewToolWritesSnapshotAndReturnsPath(t *testing.T) {
 		t.Fatalf("call failed: %+v %v", r, err)
 	}
 	raw, _ := json.Marshal(r.StructuredContent)
-	var out struct {
+	type response struct {
 		Path     string `json:"path"`
+		FileURL  string `json:"file_url"`
 		Projects int    `json:"projects"`
 		Memories int    `json:"memories"`
 	}
+	var out response
 	if err = json.Unmarshal(raw, &out); err != nil || out.Projects != 1 || out.Memories != 1 {
 		t.Fatalf("unexpected result %s %v", raw, err)
 	}
 	if filepath.Dir(out.Path) != filepath.Join(filepath.Dir(db), "views") {
 		t.Fatalf("snapshot escaped the views directory: %s", out.Path)
+	}
+	u, err := url.Parse(out.FileURL)
+	if err != nil || u.Scheme != "file" || u.Host != "" || u.Path != filepath.ToSlash(out.Path) || u.RawQuery != "" || u.Fragment != "" {
+		t.Fatalf("file_url %q does not open path %q: %v", out.FileURL, out.Path, err)
+	}
+	if len(r.Content) != 1 {
+		t.Fatalf("expected one text block: %v", r.Content)
+	}
+	var textOut response
+	textBlock, ok := r.Content[0].(*mcp.TextContent)
+	if !ok || json.Unmarshal([]byte(textBlock.Text), &textOut) != nil || textOut != out {
+		t.Fatalf("text response does not mirror structured response: %v", r.Content)
 	}
 	info, err := os.Stat(out.Path)
 	if err != nil || info.Mode().Perm() != 0600 {
@@ -87,8 +102,21 @@ func TestViewToolWritesSnapshotAndReturnsPath(t *testing.T) {
 	}
 }
 
+func TestViewToolKeepsPathWithinResponseBudget(t *testing.T) {
+	cs, _ := viewSession(t, strings.Repeat("a", 150), 1024)
+	r, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "memory_view"})
+	if err != nil || r.IsError {
+		t.Fatalf("call failed: %+v %v", r, err)
+	}
+	out := r.StructuredContent.(map[string]any)
+	path, _ := out["path"].(string)
+	if path == "" || out["file_url"] != nil {
+		t.Fatalf("expected a path without the file URL: %v", out)
+	}
+}
+
 func TestViewToolRejectsBadProject(t *testing.T) {
-	cs, db := viewSession(t)
+	cs, db := viewSession(t, "private", 8000)
 	for _, key := range []string{"missing", "../escape", "A B"} {
 		r, err := cs.CallTool(context.Background(), &mcp.CallToolParams{Name: "memory_view", Arguments: map[string]any{"project_key": key}})
 		if err != nil || !r.IsError {
