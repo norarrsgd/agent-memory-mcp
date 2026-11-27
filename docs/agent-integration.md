@@ -1,12 +1,12 @@
-# Configure Codex and Claude Code
+# Connect MCP clients
 
-Build the executable first and register stable project keys. Both clients launch independent stdio processes with the same database path. No background daemon is necessary.
+[Build the executable](../README.md#build-and-test) first and register stable project keys. Each client launches its own stdio process. Use the same absolute database path across clients to share memories and handoffs.
 
 ## Verification boundary
 
-The Codex commands follow `codex mcp --help` and `codex mcp add --help`. The Claude Code examples follow the official documentation at https://code.claude.com/docs/en/mcp. Neither has been verified against a live client.
+The Codex commands follow `codex mcp --help` and `codex mcp add --help`. The Claude Code examples follow the official documentation at https://code.claude.com/docs/en/mcp. The Google CLI setup follows the official documentation linked below.
 
-Automated official-SDK client tests cover initialization, tool discovery, invocation, structured errors, stdio, and cross-process visibility. Neither client has been launched against this server, and no global configuration has been modified. Per the development constraint, no manual server launch is part of verification.
+Automated tests with the official MCP SDK cover initialization, tool discovery, invocation, structured errors, stdio, and cross-process visibility. The setup instructions below have not been verified in live client sessions.
 
 ## Codex
 
@@ -41,6 +41,33 @@ Claude Code may defer MCP tool schemas, so the agent must load them (ToolSearch)
 - `Stop` blocks once when the turn used non-memory tools but never called `memory_upsert` or `memory_handoff`. The agent can satisfy it by writing memory or by stating `Memory: no durable change`. A `stop_hook_active` retry is always allowed, so it cannot loop.
 
 The hook is stateless and never opens the database: it reads the hook payload and the session transcript. It fails open on malformed input or a missing transcript. Limits: the search check is per session rather than per task, the Stop gate cannot judge whether a write was meaningful, and the transcript shape (`type`, `isMeta`, `isSidechain`, `message.content` blocks) is read from Claude Code's current JSONL format and is not a documented contract. Not verified against a live Claude Code session.
+
+## Antigravity CLI and Gemini CLI
+
+Choose the configuration file for your client and scope.
+
+- **Antigravity CLI (`agy`)** uses `~/.gemini/config/mcp_config.json` for all workspaces or `.agents/mcp_config.json` at the workspace root for one workspace. [Antigravity CLI MCP documentation](https://antigravity.google/docs/mcp?tab=cli)
+- **Gemini CLI (`gemini`)** uses `~/.gemini/settings.json` for all workspaces or `.gemini/settings.json` at the workspace root for one workspace. [Gemini CLI MCP documentation](https://geminicli.com/docs/tools/mcp-server/)
+
+Replace both placeholder paths with absolute paths. Set `command` to the built `bin/agent-memory` executable and `AGENT_MEMORY_DB_PATH` to the database your other agents already use. For a new shared database, use the absolute form of `~/.local/share/agent-memory/memory.db`. If the file already has an `mcpServers` object, merge the `agent-memory` entry into it and preserve the other settings.
+
+```json
+{
+  "mcpServers": {
+    "agent-memory": {
+      "command": "/absolute/path/to/agent-memory-mcp/bin/agent-memory",
+      "args": ["serve"],
+      "env": {
+        "AGENT_MEMORY_DB_PATH": "/absolute/private/agent-memory/memory.db"
+      }
+    }
+  }
+}
+```
+
+Start a new CLI session in the workspace and run `/mcp` to check that `agent-memory` appears and connects. Then ask the agent to call `memory_projects` and confirm the result includes a project you already registered through another client.
+
+To give the agent standing instructions for when to use memory, add the [retrieval and handoff workflow](#retrieval-and-handoff-workflow) to `~/.gemini/GEMINI.md` and use `gemini` as `source_agent` on writes. [Google's guide to shared context files](https://antigravity.google/docs/cli/gcli-migration/#context-files-and-workspace-rules)
 
 ## Retrieval and handoff workflow
 

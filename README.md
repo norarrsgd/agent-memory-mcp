@@ -32,7 +32,7 @@ Default database: `~/.local/share/agent-memory/memory.db`. Its application direc
 
 ## Connect agents
 
-See [agent integration](docs/agent-integration.md) for user-scoped examples and minimal instructions. Both clients must use the same absolute executable and database paths. Existing global configuration and instruction files are never modified by this project. Claude Code users can also opt in to the stateless `agent-memory hook` command, which reminds the agent to search and write memory; it never opens the database.
+See the [agent integration guide](docs/agent-integration.md) for Codex and Claude Code, and [Google CLI setup](docs/agent-integration.md#antigravity-cli-and-gemini-cli) for Antigravity CLI and Gemini CLI. Use the same absolute database path in each client to share memory. This project leaves global configuration and instruction files under your control. Claude Code users can opt in to the stateless `agent-memory hook` command for memory reminders, which runs without opening the database.
 
 `agent-memory serve` is the stdio entry point used by MCP clients. It is not a daemon or an HTTP service; do not run it in a terminal expecting interactive output. Diagnostics use stderr exclusively.
 
